@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Khách hàng{% endblock %}
+{% block page_title %}Quản lý khách hàng{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="mb-0">Danh sách khách hàng</h4>
+    <small class="text-muted">{{ customers|length }} khách hàng</small>
+  </div>
+  <a href="{{ url_for('customers.create') }}" class="btn btn-primary">
+    <i class="fas fa-user-plus me-2"></i>Thêm khách hàng
+  </a>
+</div>
+
+<div class="card-custom mb-4">
+  <div class="card-custom-body">
+    <form method="GET" class="row g-3">
+      <div class="col-md-8">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Tìm theo tên, email, SĐT..."/>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-1"></i>Tìm kiếm</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card-custom">
+  <div class="card-custom-body p-0">
+    <div class="table-responsive">
+      <table class="table table-custom mb-0">
+        <thead>
+          <tr><th>#</th><th>Khách hàng</th><th>Điện thoại</th><th>Email</th><th>Tổng chi tiêu</th><th>Hành động</th></tr>
+        </thead>
+        <tbody>
+          {% for c in customers %}
+          <tr class="animate__animated animate__fadeIn">
+            <td>{{ loop.index }}</td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="avatar-circle">{{ c.name[0] }}</div>
+                <a href="{{ url_for('customers.detail', customer_id=c._id) }}" class="fw-600 text-dark">{{ c.name }}</a>
+              </div>
+            </td>
+            <td>{{ c.phone }}</td>
+            <td class="text-muted">{{ c.email }}</td>
+            <td class="fw-600 text-primary">{{ "{:,.0f}".format(c.total_spent) }} ₫</td>
+            <td>
+              <div class="d-flex gap-1">
+                <a href="{{ url_for('customers.detail', customer_id=c._id) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></a>
+                <a href="{{ url_for('customers.edit', customer_id=c._id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>
+                {% if current_user.is_admin %}
+                <form method="POST" action="{{ url_for('customers.delete', customer_id=c._id) }}" class="d-inline"
+                      onsubmit="return confirm('Xóa khách hàng này?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                  <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4"><i class="fas fa-users fa-2x mb-2 d-block"></i>Không có khách hàng nào.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

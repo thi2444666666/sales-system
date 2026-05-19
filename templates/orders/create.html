@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Tạo hóa đơn{% endblock %}
+{% block page_title %}Tạo hóa đơn mới{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card-custom animate__animated animate__fadeInLeft">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-cart-plus me-2"></i>Chọn sản phẩm</h6>
+      </div>
+      <div class="card-custom-body">
+        <form method="POST" id="orderForm" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <!-- Customer -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-600">Khách hàng</label>
+              <select class="form-select" name="customer_id" id="customerSelect">
+                <option value="">-- Khách lẻ --</option>
+                {% for c in customers %}
+                <option value="{{ c._id }}">{{ c.name }} ({{ c.phone }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-600">Tên khách (nếu chưa có)</label>
+              <input type="text" class="form-control" name="customer_name" placeholder="Nhập tên khách..."/>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-600">Ghi chú</label>
+              <input type="text" class="form-control" name="note" placeholder="Ghi chú hóa đơn..."/>
+            </div>
+          </div>
+
+          <!-- Product rows -->
+          <div id="productRows"></div>
+
+          <button type="button" class="btn btn-outline-primary btn-sm mb-4" onclick="addProductRow()">
+            <i class="fas fa-plus me-1"></i>Thêm sản phẩm
+          </button>
+
+          <div class="order-total-box">
+            <span>Tổng tiền:</span>
+            <span class="total-amount" id="totalDisplay">0 ₫</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 btn-lg mt-3" id="submitBtn" disabled>
+            <i class="fas fa-check-circle me-2"></i>Xác nhận thanh toán
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product quick reference -->
+  <div class="col-lg-4">
+    <div class="card-custom animate__animated animate__fadeInRight">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-boxes me-2"></i>Danh sách sản phẩm</h6>
+      </div>
+      <div class="card-custom-body p-0" style="max-height:500px;overflow-y:auto">
+        <table class="table table-sm mb-0">
+          {% for p in products %}
+          <tr class="product-ref-row" onclick="quickAddProduct('{{ p._id }}', '{{ p.name }}', {{ p.price }}, {{ p.stock }})" style="cursor:pointer">
+            <td><strong>{{ p.name }}</strong><br><small class="text-muted">{{ p.category }}</small></td>
+            <td class="text-end text-primary fw-600">{{ "{:,.0f}".format(p.price) }}₫<br><small class="text-muted">Kho: {{ p.stock }}</small></td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const products = {
+  {% for p in products %}
+  "{{ p._id }}": { name: "{{ p.name }}", price: {{ p.price }}, stock: {{ p.stock }} },
+  {% endfor %}
+};
+
+let rowCount = 0;
+let total = 0;
+
+function addProductRow(pid, pname, pprice, pstock) {
+  rowCount++;
+  const row = document.createElement("div");
+  row.className = "product-row animate__animated animate__fadeIn";
+  row.id = "row_" + rowCount;
+  row.innerHTML = `
+    <div class="row g-2 align-items-end mb-2">
+      <div class="col-md-5">
+        <label class="form-label small fw-600">Sản phẩm</label>
+        <select class="form-select form-select-sm product-select" name="product_id[]" onchange="onProductChange(this, ${rowCount})">
+          <option value="">-- Chọn --</option>
+          ${Object.entries(products).map(([id,p]) =>
+            `<option value="${id}" ${pid===id?"selected":""}>${p.name}</option>`).join("")}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-600">SL</label>
+        <input type="number" class="form-control form-control-sm qty-input" name="quantity[]" value="1" min="1" onchange="recalcTotal()" id="qty_${rowCount}"/>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-600">Đơn giá</label>
+        <input type="text" class="form-control form-control-sm" readonly id="price_${rowCount}" value="${pprice ? new Intl.NumberFormat("vi-VN").format(pprice) + " ₫" : ""}"/>
+        <input type="hidden" id="priceval_${rowCount}" value="${pprice || 0}"/>
+      </div>
+      <div class="col-md-2 text-end">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(${rowCount})"><i class="fas fa-times"></i></button>
+      </div>
+    </div>`;
+  document.getElementById("productRows").appendChild(row);
+  if (pid) {
+    const sel = row.querySelector("select");
+    sel.value = pid;
+    recalcTotal();
+  }
+  recalcTotal();
+}
+
+function onProductChange(sel, rowId) {
+  const pid = sel.value;
+  if (products[pid]) {
+    document.getElementById("price_" + rowId).value = new Intl.NumberFormat("vi-VN").format(products[pid].price) + " ₫";
+    document.getElementById("priceval_" + rowId).value = products[pid].price;
+  }
+  recalcTotal();
+}
+
+function removeRow(rowId) {
+  const el = document.getElementById("row_" + rowId);
+  if (el) el.remove();
+  recalcTotal();
+}
+
+function recalcTotal() {
+  let t = 0;
+  document.querySelectorAll(".product-row").forEach(row => {
+    const rowId = row.id.split("_")[1];
+    const price = parseFloat(document.getElementById("priceval_" + rowId)?.value || 0);
+    const qty = parseInt(document.getElementById("qty_" + rowId)?.value || 1);
+    const sel = row.querySelector("select");
+    if (sel && sel.value) t += price * qty;
+  });
+  document.getElementById("totalDisplay").textContent = new Intl.NumberFormat("vi-VN").format(t) + " ₫";
+  document.getElementById("submitBtn").disabled = (t === 0);
+}
+
+function quickAddProduct(pid, pname, pprice, pstock) {
+  addProductRow(pid, pname, pprice, pstock);
+}
+
+// Start with one row
+addProductRow();
+</script>
+{% endblock %}

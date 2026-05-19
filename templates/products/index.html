@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Sản phẩm{% endblock %}
+{% block page_title %}Quản lý sản phẩm{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="mb-0">Danh sách sản phẩm</h4>
+    <small class="text-muted">{{ products|length }} sản phẩm</small>
+  </div>
+  {% if current_user.is_admin %}
+  <a href="{{ url_for('products.create') }}" class="btn btn-primary">
+    <i class="fas fa-plus me-2"></i>Thêm sản phẩm
+  </a>
+  {% endif %}
+</div>
+
+<!-- Search & Filter -->
+<div class="card-custom mb-4">
+  <div class="card-custom-body">
+    <form method="GET" class="row g-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Tìm sản phẩm..."/>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <select class="form-select" name="category">
+          <option value="">Tất cả danh mục</option>
+          {% for cat in categories %}
+          <option value="{{ cat }}" {% if selected_category==cat %}selected{% endif %}>{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i>Lọc</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for p in products %}
+  <div class="col-xl-3 col-md-4 col-sm-6 animate__animated animate__fadeIn">
+    <div class="product-card">
+      <div class="product-img-wrap">
+        <img src="{{ url_for('static', filename='images/uploads/' + p.image) if p.image != 'default_product.png' else url_for('static', filename='images/default_product.png') }}" alt="{{ p.name }}" class="product-img" onerror="this.src='{{ url_for('static', filename='images/default_product.png') }}'"/>
+        <span class="category-badge">{{ p.category }}</span>
+        {% if p.stock < 10 %}
+        <span class="stock-badge-low">Sắp hết</span>
+        {% endif %}
+      </div>
+      <div class="product-body">
+        <h6 class="product-name">{{ p.name }}</h6>
+        <div class="product-price">{{ "{:,.0f}".format(p.price) }} ₫</div>
+        <div class="product-stock"><i class="fas fa-warehouse me-1"></i>Tồn: {{ p.stock }}</div>
+        {% if current_user.is_admin %}
+        <div class="product-actions mt-3">
+          <a href="{{ url_for('products.edit', product_id=p._id) }}" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-edit"></i>
+          </a>
+          <form method="POST" action="{{ url_for('products.delete', product_id=p._id) }}" class="d-inline"
+                onsubmit="return confirm('Xóa sản phẩm này?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center py-5">
+    <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+    <p class="text-muted">Không có sản phẩm nào.</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

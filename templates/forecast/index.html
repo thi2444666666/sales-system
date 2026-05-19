@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Dự báo doanh thu{% endblock %}
+{% block page_title %}Dự báo doanh thu AI{% endblock %}
+{% block content %}
+
+<!-- Form chọn số tháng dự báo -->
+<div class="card-custom animate__animated animate__fadeInUp mb-4">
+  <div class="card-custom-header">
+    <h6 class="mb-0"><i class="fas fa-sliders-h me-2 text-primary"></i>Cấu hình dự báo</h6>
+  </div>
+  <div class="card-custom-body">
+    <form method="POST" class="row g-3 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Số tháng dự báo</label>
+        <select class="form-select" name="months_ahead">
+          {% for i in range(1, 13) %}
+          <option value="{{ i }}" {% if forecast.months_ahead == i %}selected{% endif %}>{{ i }} tháng</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="fas fa-play me-2"></i>Thực hiện dự báo
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Metric cards -->
+{% if forecast.has_data %}
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="stat-card stat-card-blue animate__animated animate__fadeInUp">
+      <div class="stat-icon"><i class="fas fa-brain"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Mô hình</div>
+        <div class="stat-value" style="font-size:1.4rem">Linear Regression</div>
+        <div class="stat-sub">scikit-learn</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
+      <div class="stat-icon"><i class="fas fa-bullseye"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">MAE</div>
+        <div class="stat-value counter" data-target="{{ forecast.mae|int }}">0</div>
+        <div class="stat-sub">Mean Absolute Error (₫)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.2s">
+      <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">R² Score</div>
+        <div class="stat-value">{{ "%.3f"|format(forecast.r2) }}</div>
+        <div class="stat-sub">Độ chính xác mô hình</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Forecast chart -->
+<div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.3s">
+  <div class="card-custom-header">
+    <div>
+      <h6 class="mb-0"><i class="fas fa-chart-area me-2 text-primary"></i>Biểu đồ dự báo doanh thu</h6>
+      <small class="text-muted">Thực tế vs Dự báo {{ forecast.months_ahead }} tháng tiếp theo</small>
+    </div>
+  </div>
+  <div class="card-custom-body">
+    <canvas id="forecastChart" height="80"></canvas>
+  </div>
+</div>
+
+<!-- Forecast table + model info -->
+<div class="row g-4 mt-2">
+  <div class="col-md-6">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.4s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-calendar-alt me-2 text-success"></i>Dự báo các tháng tới</h6>
+      </div>
+      <div class="card-custom-body p-0">
+        <table class="table table-custom mb-0">
+          <thead><tr><th>Tháng</th><th class="text-end">Dự báo doanh thu</th></tr></thead>
+          <tbody>
+            {% for i in range(forecast.forecast_labels|length) %}
+            <tr>
+              <td><i class="fas fa-calendar me-2 text-primary"></i>Tháng {{ forecast.forecast_labels[i] }}</td>
+              <td class="text-end fw-bold text-success">{{ "{:,.0f}".format(forecast.forecast_values[i]) }} ₫</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.5s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-info-circle me-2 text-info"></i>Thông tin mô hình</h6>
+      </div>
+      <div class="card-custom-body">
+        <p><strong>Thuật toán:</strong> Linear Regression</p>
+        <p><strong>Số tháng huấn luyện:</strong> {{ forecast.actual_labels|length }}</p>
+        <p><strong>MAE:</strong> {{ "{:,.0f}".format(forecast.mae) }} ₫</p>
+        <p><strong>RMSE:</strong> {{ "{:,.0f}".format(forecast.rmse) }} ₫</p>
+        <p class="mb-0"><strong>R² Score:</strong> {{ "%.4f"|format(forecast.r2) }}
+          <span class="text-muted">
+            ({{ "Tốt" if forecast.r2 > 0.8 else "Trung bình" if forecast.r2 > 0.5 else "Cần thêm dữ liệu" }})
+          </span>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="card-custom text-center py-5 animate__animated animate__fadeIn">
+  <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
+  <h5 class="text-muted">{{ forecast.message }}</h5>
+  <p class="text-muted">Hãy tạo thêm đơn hàng để hệ thống có đủ dữ liệu dự báo.</p>
+  <a href="{{ url_for('orders.create') }}" class="btn btn-primary mt-2">
+    <i class="fas fa-plus me-2"></i>Tạo hóa đơn
+  </a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{% if forecast.has_data %}
+<!-- Truyền dữ liệu qua thẻ JSON riêng, tránh xung đột Jinja2 với JS -->
+<script id="forecastData" type="application/json">
+{
+  "actualLabels":   {{ forecast.actual_labels   | tojson }},
+  "actualValues":   {{ forecast.actual_values   | tojson }},
+  "forecastLabels": {{ forecast.forecast_labels | tojson }},
+  "forecastValues": {{ forecast.forecast_values | tojson }}
+}
+</script>
+
+<script>
+(function () {
+  var raw  = document.getElementById("forecastData").textContent;
+  var fd   = JSON.parse(raw);
+
+  var actualLabels   = fd.actualLabels;
+  var actualValues   = fd.actualValues;
+  var forecastLabels = fd.forecastLabels;
+  var forecastValues = fd.forecastValues;
+
+  var allLabels   = actualLabels.concat(forecastLabels);
+
+  /* Padding: đường thực tế kết thúc ở điểm cuối, phần còn lại null */
+  var actualPad = actualValues.concat(
+    new Array(forecastLabels.length).fill(null)
+  );
+
+  /* Padding: đường dự báo bắt đầu từ điểm cuối thực tế để nối liền */
+  var forecastPad = new Array(actualLabels.length - 1).fill(null)
+    .concat([actualValues[actualValues.length - 1]])
+    .concat(forecastValues);
+
+  var canvas     = document.getElementById("forecastChart");
+  var canvasCtx  = canvas.getContext("2d");
+
+  new Chart(canvasCtx, {
+    type: "line",
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          label: "Thực tế",
+          data: actualPad,
+          borderColor: "#6366f1",
+          backgroundColor: "rgba(99,102,241,0.1)",
+          borderWidth: 3,
+          pointRadius: 5,
+          pointBackgroundColor: "#6366f1",
+          fill: true,
+          tension: 0.4,
+          spanGaps: false
+        },
+        {
+          label: "Dự báo",
+          data: forecastPad,
+          borderColor: "#f97316",
+          backgroundColor: "rgba(249,115,22,0.1)",
+          borderWidth: 3,
+          borderDash: [8, 4],
+          pointRadius: 6,
+          pointBackgroundColor: "#f97316",
+          fill: true,
+          tension: 0.4,
+          spanGaps: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function (item) {
+              return item.dataset.label + ": " +
+                new Intl.NumberFormat("vi-VN").format(item.parsed.y) + " ₫";
+            }
+          }
+        },
+        legend: { position: "top" }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: function (v) {
+              return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫";
+            }
+          },
+          grid: { color: "rgba(0,0,0,0.05)" }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}());
+</script>
+{% endif %}
+{% endblock %}

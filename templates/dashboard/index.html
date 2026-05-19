@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - SalesManager{% endblock %}
+{% block page_title %}Tổng quan{% endblock %}
+{% block content %}
+
+<!-- Stat cards -->
+<div class="row g-4 mb-4">
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card stat-card-blue animate__animated animate__fadeInUp" style="animation-delay:.0s">
+      <div class="stat-icon"><i class="fas fa-coins"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Doanh thu hôm nay</div>
+        <div class="stat-value counter" data-target="{{ stats.today_revenue|int }}">0</div>
+        <div class="stat-sub"><i class="fas fa-shopping-cart me-1"></i>{{ stats.today_orders }} đơn hàng</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
+      <div class="stat-icon"><i class="fas fa-calendar-alt"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Doanh thu tháng này</div>
+        <div class="stat-value counter" data-target="{{ stats.month_revenue|int }}">0</div>
+        <div class="stat-sub">
+          {% if stats.growth >= 0 %}
+            <i class="fas fa-arrow-up text-success me-1"></i><span class="text-success">+{{ stats.growth }}%</span>
+          {% else %}
+            <i class="fas fa-arrow-down text-danger me-1"></i><span class="text-danger">{{ stats.growth }}%</span>
+          {% endif %}
+          so với tháng trước
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.2s">
+      <div class="stat-icon"><i class="fas fa-box"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Sản phẩm</div>
+        <div class="stat-value counter" data-target="{{ stats.total_products }}">0</div>
+        <div class="stat-sub">
+          <i class="fas fa-times-circle text-danger me-1"></i>{{ stats.out_of_stock }} hết hàng
+          {% if stats.low_stock > 0 %}
+          &bull; <i class="fas fa-exclamation-triangle text-warning me-1"></i>{{ stats.low_stock }} sắp hết
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card stat-card-orange animate__animated animate__fadeInUp" style="animation-delay:.3s">
+      <div class="stat-icon"><i class="fas fa-users"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Khách hàng</div>
+        <div class="stat-value counter" data-target="{{ stats.total_customers }}">0</div>
+        <div class="stat-sub"><i class="fas fa-receipt me-1"></i>{{ stats.total_orders }} đơn hàng tổng</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="row g-4 mb-4">
+  <div class="col-xl-8">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.4s">
+      <div class="card-custom-header">
+        <div>
+          <h6 class="mb-0"><i class="fas fa-chart-area me-2 text-primary"></i>Doanh thu theo tháng</h6>
+          <small class="text-muted">12 tháng gần nhất</small>
+        </div>
+      </div>
+      <div class="card-custom-body">
+        <canvas id="revenueChart" height="100"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.5s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-trophy me-2 text-warning"></i>Top sản phẩm bán chạy</h6>
+      </div>
+      <div class="card-custom-body">
+        {% for p in stats.top_products %}
+        <div class="top-item">
+          <div class="top-rank rank-{{ loop.index }}">{{ loop.index }}</div>
+          <div class="top-info">
+            <div class="top-name">{{ p.name }}</div>
+            <div class="top-sub">{{ p.total_qty }} sản phẩm &bull; {{ "{:,.0f}".format(p.total_revenue) }} ₫</div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-3">Chưa có dữ liệu</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Top customers -->
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.6s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-star me-2 text-warning"></i>Top khách hàng VIP</h6>
+      </div>
+      <div class="card-custom-body p-0">
+        <div class="table-responsive">
+          <table class="table table-custom mb-0">
+            <thead><tr><th>#</th><th>Khách hàng</th><th>Số đơn</th><th>Tổng chi tiêu</th></tr></thead>
+            <tbody>
+              {% for c in stats.top_customers %}
+              <tr>
+                <td><span class="rank-badge">{{ loop.index }}</span></td>
+                <td><i class="fas fa-user-circle me-2 text-primary"></i>{{ c.name }}</td>
+                <td><span class="badge bg-info-soft text-info">{{ c.total_orders }} đơn</span></td>
+                <td class="fw-600 text-primary">{{ "{:,.0f}".format(c.total_spent) }} ₫</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="text-center text-muted py-4">Chưa có dữ liệu</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Truyền dữ liệu qua thẻ JSON riêng, tránh xung đột Jinja2 với JS -->
+<script id="chartData" type="application/json">
+{
+  "labels": {{ stats.chart_labels | tojson }},
+  "data":   {{ stats.chart_data   | tojson }}
+}
+</script>
+
+<script>
+(function () {
+  var raw    = document.getElementById("chartData").textContent;
+  var parsed = JSON.parse(raw);
+  var chartLabels = parsed.labels;
+  var chartData   = parsed.data;
+
+  var canvas  = document.getElementById("revenueChart");
+  var canvasCtx = canvas.getContext("2d");
+
+  var gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
+  gradient.addColorStop(0, "rgba(99,102,241,0.3)");
+  gradient.addColorStop(1, "rgba(99,102,241,0)");
+
+  new Chart(canvasCtx, {
+    type: "line",
+    data: {
+      labels: chartLabels,
+      datasets: [{
+        label: "Doanh thu (₫)",
+        data: chartData,
+        borderColor: "#6366f1",
+        backgroundColor: gradient,
+        borderWidth: 3,
+        pointBackgroundColor: "#6366f1",
+        pointRadius: 5,
+        pointHoverRadius: 8,
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (item) {
+              return " " + new Intl.NumberFormat("vi-VN").format(item.parsed.y) + " ₫";
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: function (v) {
+              return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫";
+            }
+          },
+          grid: { color: "rgba(0,0,0,0.05)" }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}());
+</script>
+{% endblock %}

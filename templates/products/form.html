@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ "Sửa" if action=="edit" else "Thêm" }} sản phẩm{% endblock %}
+{% block page_title %}{{ "Cập nhật" if action=="edit" else "Thêm mới" }} sản phẩm{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card-custom animate__animated animate__fadeInUp">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-box me-2"></i>Thông tin sản phẩm</h6>
+      </div>
+      <div class="card-custom-body">
+        <form method="POST" enctype="multipart/form-data" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label fw-600">Tên sản phẩm <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" value="{{ product.name if product else '' }}" required/>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-600">Danh mục <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="category" value="{{ product.category if product else '' }}" placeholder="VD: Laptop" required/>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-600">Giá bán (₫)</label>
+              <input type="number" class="form-control" name="price" value="{{ product.price if product else 0 }}" min="0" step="1000"/>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-600">Số lượng tồn kho</label>
+              <input type="number" class="form-control" name="stock" value="{{ product.stock if product else 0 }}" min="0"/>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-600">Mô tả</label>
+              <textarea class="form-control" name="description" rows="3">{{ product.description if product else '' }}</textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-600">Hình ảnh sản phẩm</label>
+              <input type="file" class="form-control" name="image" accept="image/*"/>
+            </div>
+            <div class="col-12 d-flex gap-2">
+              <button type="submit" class="btn btn-primary px-4">
+                <i class="fas fa-save me-2"></i>{{ "Cập nhật" if action=="edit" else "Thêm mới" }}
+              </button>
+              <a href="{{ url_for('products.index') }}" class="btn btn-outline-secondary">Hủy</a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

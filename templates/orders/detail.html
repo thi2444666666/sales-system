@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Chi tiết hóa đơn{% endblock %}
+{% block page_title %}Chi tiết hóa đơn{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card-custom animate__animated animate__fadeInUp">
+      <div class="card-custom-header d-flex justify-content-between align-items-center">
+        <div>
+          <h6 class="mb-0"><i class="fas fa-receipt me-2"></i>{{ order.order_code }}</h6>
+          <small class="text-muted">{{ order.created_at.strftime("%d/%m/%Y %H:%M") if order.created_at else "" }}</small>
+        </div>
+        <span class="badge bg-success fs-6">Đã thanh toán</span>
+      </div>
+      <div class="card-custom-body">
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <p class="mb-1 text-muted small">KHÁCH HÀNG</p>
+            <p class="fw-600 mb-0"><i class="fas fa-user me-2"></i>{{ order.customer_name }}</p>
+          </div>
+          <div class="col-md-6 text-md-end">
+            <p class="mb-1 text-muted small">NHÂN VIÊN TẠO</p>
+            <p class="fw-600 mb-0"><i class="fas fa-user-tie me-2"></i>{{ order.created_by }}</p>
+          </div>
+        </div>
+
+        <table class="table table-custom">
+          <thead><tr><th>#</th><th>Sản phẩm</th><th>Đơn giá</th><th>SL</th><th class="text-end">Thành tiền</th></tr></thead>
+          <tbody>
+            {% for item in order.items %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td class="fw-600">{{ item.name }}</td>
+              <td>{{ "{:,.0f}".format(item.price) }} ₫</td>
+              <td>{{ item.qty }}</td>
+              <td class="text-end fw-600 text-primary">{{ "{:,.0f}".format(item.subtotal) }} ₫</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" class="text-end fw-700">TỔNG CỘNG:</td>
+              <td class="text-end fw-700 fs-5 text-primary">{{ "{:,.0f}".format(order.total) }} ₫</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {% if order.note %}
+        <div class="alert alert-light">
+          <i class="fas fa-sticky-note me-2"></i><strong>Ghi chú:</strong> {{ order.note }}
+        </div>
+        {% endif %}
+
+        <div class="text-center mt-3">
+          <a href="{{ url_for('orders.index') }}" class="btn btn-outline-secondary me-2">
+            <i class="fas fa-arrow-left me-1"></i>Quay lại
+          </a>
+          <button onclick="window.print()" class="btn btn-primary">
+            <i class="fas fa-print me-1"></i>In hóa đơn
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

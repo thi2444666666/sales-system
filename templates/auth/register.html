@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block auth_content %}
+<div class="auth-wrapper">
+  <div class="auth-card animate__animated animate__fadeInUp">
+    <div class="auth-logo">
+      <div class="auth-logo-icon"><i class="fas fa-user-plus"></i></div>
+      <h2>Đăng ký tài khoản</h2>
+      <p>Tạo tài khoản mới để bắt đầu</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+      <div class="alert alert-{{ category }}"><i class="fas fa-info-circle me-2"></i>{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="form-floating mb-3">
+        <input type="text" class="form-control" name="full_name" placeholder="Họ và tên" required/>
+        <label><i class="fas fa-id-card me-2"></i>Họ và tên</label>
+      </div>
+      <div class="form-floating mb-3">
+        <input type="text" class="form-control" name="username" placeholder="Username" required/>
+        <label><i class="fas fa-user me-2"></i>Tên đăng nhập</label>
+      </div>
+      <div class="form-floating mb-3">
+        <input type="email" class="form-control" name="email" placeholder="Email" required/>
+        <label><i class="fas fa-envelope me-2"></i>Email</label>
+      </div>
+      <div class="form-floating mb-3">
+        <input type="password" class="form-control" name="password" placeholder="Mật khẩu" required/>
+        <label><i class="fas fa-lock me-2"></i>Mật khẩu</label>
+      </div>
+      <div class="form-floating mb-3">
+        <input type="password" class="form-control" name="confirm_password" placeholder="Xác nhận" required/>
+        <label><i class="fas fa-lock me-2"></i>Xác nhận mật khẩu</label>
+      </div>
+      <button type="submit" class="btn btn-success w-100 btn-lg">
+        <i class="fas fa-user-plus me-2"></i>Đăng ký
+      </button>
+    </form>
+    <div class="auth-footer">
+      Đã có tài khoản? <a href="{{ url_for('auth.login') }}">Đăng nhập</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
