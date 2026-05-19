@@ -11,3 +11,6 @@ pymongo==4.16.0
 Werkzeug==3.1.6
 WTForms==3.2.1
 python-dotenv==1.2.2
+requests==2.32.3
+Pillow==11.2.1
+gunicorn==21.2.0
