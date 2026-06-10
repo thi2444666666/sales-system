@@ -38,9 +38,18 @@
     <a href="{{ url_for('customers.index') }}" class="nav-item {% if 'customers' in request.endpoint %}active{% endif %}">
       <i class="fas fa-users"></i><span>Khách hàng</span>
     </a>
-    <a href="{{ url_for('orders.index') }}" class="nav-item {% if 'orders' in request.endpoint %}active{% endif %}">
+    <a href="{{ url_for('orders.index') }}" class="nav-item {% if request.endpoint in ['orders.index','orders.detail'] %}active{% endif %}">
       <i class="fas fa-receipt"></i><span>Hóa đơn</span>
     </a>
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('orders.create') }}" class="nav-item {% if request.endpoint == 'orders.create' %}active{% endif %}">
+      <i class="fas fa-file-invoice"></i><span>Tạo hóa đơn</span>
+    </a>
+    {% else %}
+    <a href="{{ url_for('cart.index') }}" class="nav-item {% if 'cart' in request.endpoint %}active{% endif %}">
+      <i class="fas fa-shopping-cart"></i><span>Giỏ hàng</span>
+    </a>
+    {% endif %}
 
     <div class="nav-section-title">PHÂN TÍCH</div>
     <a href="{{ url_for('forecast.index') }}" class="nav-item {% if 'forecast' in request.endpoint %}active{% endif %}">

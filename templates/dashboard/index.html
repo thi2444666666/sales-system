@@ -16,6 +16,23 @@
     </div>
   </div>
   <div class="col-xl-3 col-md-6">
+    <div class="stat-card stat-card-teal animate__animated animate__fadeInUp" style="animation-delay:.05s">
+      <div class="stat-icon"><i class="fas fa-calendar-week"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Doanh thu tuần này</div>
+        <div class="stat-value counter" data-target="{{ stats.week_revenue|int }}">0</div>
+        <div class="stat-sub">
+          {% if stats.week_growth >= 0 %}
+            <i class="fas fa-arrow-up text-success me-1"></i><span class="text-success">+{{ stats.week_growth }}%</span>
+          {% else %}
+            <i class="fas fa-arrow-down text-danger me-1"></i><span class="text-danger">{{ stats.week_growth }}%</span>
+          {% endif %}
+          so với tuần trước
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
     <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
       <div class="stat-icon"><i class="fas fa-calendar-alt"></i></div>
       <div class="stat-body">
@@ -44,16 +61,6 @@
           &bull; <i class="fas fa-exclamation-triangle text-warning me-1"></i>{{ stats.low_stock }} sắp hết
           {% endif %}
         </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-xl-3 col-md-6">
-    <div class="stat-card stat-card-orange animate__animated animate__fadeInUp" style="animation-delay:.3s">
-      <div class="stat-icon"><i class="fas fa-users"></i></div>
-      <div class="stat-body">
-        <div class="stat-label">Khách hàng</div>
-        <div class="stat-value counter" data-target="{{ stats.total_customers }}">0</div>
-        <div class="stat-sub"><i class="fas fa-receipt me-1"></i>{{ stats.total_orders }} đơn hàng tổng</div>
       </div>
     </div>
   </div>
@@ -96,10 +103,124 @@
   </div>
 </div>
 
+<!-- Trend Analysis -->
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.55s">
+      <div class="card-custom-header">
+        <div>
+          <h6 class="mb-0"><i class="fas fa-chart-line me-2 text-info"></i>Phân tích xu hướng theo danh mục</h6>
+          <small class="text-muted">So sánh tháng này vs tháng trước</small>
+        </div>
+        <div class="d-flex gap-3 align-items-center">
+          <span class="badge bg-success-soft text-success"><i class="fas fa-arrow-up me-1"></i>Tháng này</span>
+          <span class="badge bg-secondary-soft text-secondary"><i class="fas fa-history me-1"></i>Tháng trước</span>
+        </div>
+      </div>
+      <div class="card-custom-body p-0">
+        {% if stats.category_trend %}
+        <div class="table-responsive">
+          <table class="table table-custom mb-0">
+            <thead>
+              <tr>
+                <th>Danh mục</th>
+                <th class="text-end">Tháng trước</th>
+                <th class="text-end">Tháng này</th>
+                <th class="text-center">% Thay đổi</th>
+                <th style="width:220px">Xu hướng</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cat in stats.category_trend %}
+              <tr>
+                <td>
+                  <i class="fas fa-tag me-2 text-muted"></i>
+                  <span class="fw-600">{{ cat.category or "Chưa phân loại" }}</span>
+                </td>
+                <td class="text-end text-muted">{{ "{:,.0f}".format(cat.prev_revenue) }} ₫</td>
+                <td class="text-end fw-600 text-primary">{{ "{:,.0f}".format(cat.current_revenue) }} ₫</td>
+                <td class="text-center">
+                  {% if cat.pct_change > 0 %}
+                    <span class="badge bg-success-soft text-success fw-600">
+                      <i class="fas fa-arrow-up me-1"></i>+{{ cat.pct_change }}%
+                    </span>
+                  {% elif cat.pct_change < 0 %}
+                    <span class="badge bg-danger-soft text-danger fw-600">
+                      <i class="fas fa-arrow-down me-1"></i>{{ cat.pct_change }}%
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary-soft text-secondary">
+                      <i class="fas fa-minus me-1"></i>0%
+                    </span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% set max_rev = namespace(val=1) %}
+                  {% for c in stats.category_trend %}
+                    {% if c.current_revenue > max_rev.val %}{% set max_rev.val = c.current_revenue %}{% endif %}
+                    {% if c.prev_revenue > max_rev.val %}{% set max_rev.val = c.prev_revenue %}{% endif %}
+                  {% endfor %}
+                  {% set cur_pct = ((cat.current_revenue / max_rev.val) * 100)|int %}
+                  {% set prv_pct = ((cat.prev_revenue / max_rev.val) * 100)|int %}
+                  <div class="d-flex flex-column gap-1 py-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <small class="text-muted" style="width:60px;font-size:10px">Tháng này</small>
+                      <div class="flex-grow-1 bg-light rounded" style="height:8px">
+                        <div class="rounded" style="height:8px;width:{{ cur_pct }}%;background:linear-gradient(90deg,#6366f1,#818cf8);transition:width .8s"></div>
+                      </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <small class="text-muted" style="width:60px;font-size:10px">Tháng trước</small>
+                      <div class="flex-grow-1 bg-light rounded" style="height:8px">
+                        <div class="rounded" style="height:8px;width:{{ prv_pct }}%;background:linear-gradient(90deg,#94a3b8,#cbd5e1);transition:width .8s"></div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="fas fa-chart-bar fa-3x mb-3 d-block opacity-25"></i>
+          Chưa có đủ dữ liệu để phân tích xu hướng
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Week comparison -->
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.58s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-exchange-alt me-2 text-primary"></i>So sánh doanh thu tuần</h6>
+      </div>
+      <div class="card-custom-body">
+        <canvas id="weekCompareChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.6s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-balance-scale me-2 text-purple"></i>So sánh doanh thu tháng</h6>
+      </div>
+      <div class="card-custom-body">
+        <canvas id="monthCompareChart" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Top customers -->
 <div class="row g-4">
   <div class="col-12">
-    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.6s">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.7s">
       <div class="card-custom-header">
         <h6 class="mb-0"><i class="fas fa-star me-2 text-warning"></i>Top khách hàng VIP</h6>
       </div>
@@ -128,11 +249,14 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Truyền dữ liệu qua thẻ JSON riêng, tránh xung đột Jinja2 với JS -->
 <script id="chartData" type="application/json">
 {
   "labels": {{ stats.chart_labels | tojson }},
-  "data":   {{ stats.chart_data   | tojson }}
+  "data":   {{ stats.chart_data   | tojson }},
+  "week_revenue": {{ stats.week_revenue | tojson }},
+  "prev_week_revenue": {{ stats.prev_week_revenue | tojson }},
+  "month_revenue": {{ stats.month_revenue | tojson }},
+  "prev_revenue": {{ stats.prev_revenue | tojson }}
 }
 </script>
 
@@ -140,23 +264,20 @@
 (function () {
   var raw    = document.getElementById("chartData").textContent;
   var parsed = JSON.parse(raw);
-  var chartLabels = parsed.labels;
-  var chartData   = parsed.data;
 
+  // Main revenue line chart
   var canvas  = document.getElementById("revenueChart");
   var canvasCtx = canvas.getContext("2d");
-
   var gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
   gradient.addColorStop(0, "rgba(99,102,241,0.3)");
   gradient.addColorStop(1, "rgba(99,102,241,0)");
-
   new Chart(canvasCtx, {
     type: "line",
     data: {
-      labels: chartLabels,
+      labels: parsed.labels,
       datasets: [{
         label: "Doanh thu (₫)",
-        data: chartData,
+        data: parsed.data,
         borderColor: "#6366f1",
         backgroundColor: gradient,
         borderWidth: 3,
@@ -171,23 +292,62 @@
       responsive: true,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function (item) {
-              return " " + new Intl.NumberFormat("vi-VN").format(item.parsed.y) + " ₫";
-            }
-          }
-        }
+        tooltip: { callbacks: { label: function(item) { return " " + new Intl.NumberFormat("vi-VN").format(item.parsed.y) + " ₫"; } } }
       },
       scales: {
-        y: {
-          ticks: {
-            callback: function (v) {
-              return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫";
-            }
-          },
-          grid: { color: "rgba(0,0,0,0.05)" }
-        },
+        y: { ticks: { callback: function(v) { return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫"; } }, grid: { color: "rgba(0,0,0,0.05)" } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Week comparison bar chart
+  new Chart(document.getElementById("weekCompareChart").getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: ["Tuần trước", "Tuần này"],
+      datasets: [{
+        data: [parsed.prev_week_revenue, parsed.week_revenue],
+        backgroundColor: ["rgba(148,163,184,0.7)", "rgba(99,102,241,0.85)"],
+        borderColor: ["#94a3b8", "#6366f1"],
+        borderWidth: 2,
+        borderRadius: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(item) { return " " + new Intl.NumberFormat("vi-VN").format(item.parsed.y) + " ₫"; } } }
+      },
+      scales: {
+        y: { ticks: { callback: function(v) { return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫"; } }, grid: { color: "rgba(0,0,0,0.05)" } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Month comparison bar chart
+  new Chart(document.getElementById("monthCompareChart").getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: ["Tháng trước", "Tháng này"],
+      datasets: [{
+        data: [parsed.prev_revenue, parsed.month_revenue],
+        backgroundColor: ["rgba(148,163,184,0.7)", "rgba(139,92,246,0.85)"],
+        borderColor: ["#94a3b8", "#8b5cf6"],
+        borderWidth: 2,
+        borderRadius: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(item) { return " " + new Intl.NumberFormat("vi-VN").format(item.parsed.y) + " ₫"; } } }
+      },
+      scales: {
+        y: { ticks: { callback: function(v) { return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫"; } }, grid: { color: "rgba(0,0,0,0.05)" } },
         x: { grid: { display: false } }
       }
     }

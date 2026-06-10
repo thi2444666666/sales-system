@@ -17,13 +17,23 @@ def index():
     end_str = request.args.get("end", "")
     start = datetime.strptime(start_str, "%Y-%m-%d") if start_str else None
     end = datetime.strptime(end_str + " 23:59:59", "%Y-%m-%d %H:%M:%S") if end_str else None
-    orders = Order.get_all(db, start=start, end=end)
+
+    if current_user.is_admin:
+        # Admin xem tất cả hóa đơn
+        orders = Order.get_all(db, start=start, end=end)
+    else:
+        # Staff chỉ xem hóa đơn của mình
+        orders = Order.get_by_staff(db, current_user.username, start=start, end=end)
+
     return render_template("orders/index.html", orders=orders, start=start_str, end=end_str)
 
 
 @order_bp.route("/create", methods=["GET", "POST"])
 @login_required
 def create():
+    if not current_user.is_admin:
+        flash("Staff vui lòng dùng giỏ hàng để tạo hóa đơn.", "info")
+        return redirect(url_for("cart.index"))
     db = current_app.db
     products = Product.get_all(db)
     customers = Customer.get_all(db)
@@ -60,7 +70,6 @@ def create():
                 "subtotal": subtotal,
             })
 
-        # Resolve customer name
         if customer_id:
             cust = Customer.get_by_id(db, customer_id)
             if cust:
@@ -69,7 +78,6 @@ def create():
         order = Order.create(db, customer_id or None, customer_name or "Khách lẻ",
                              items, total, note, current_user.username)
 
-        # Decrement stock & update customer spending
         for item in items:
             Product.decrement_stock(db, item["product_id"], item["qty"])
         if customer_id:
@@ -89,7 +97,27 @@ def detail(order_id):
     if not order:
         flash("Hóa đơn không tồn tại.", "danger")
         return redirect(url_for("orders.index"))
+    # Staff chỉ xem được hóa đơn của mình
+    if not current_user.is_admin and order.created_by != current_user.username:
+        flash("Bạn không có quyền xem hóa đơn này.", "danger")
+        return redirect(url_for("orders.index"))
     return render_template("orders/detail.html", order=order)
+
+
+@order_bp.route("/invoice/<order_id>")
+@login_required
+def invoice(order_id):
+    """Xuất hóa đơn in ấn cho đơn hàng đã hoàn thành."""
+    db = current_app.db
+    order = Order.get_by_id(db, order_id)
+    if not order:
+        flash("Hóa đơn không tồn tại.", "danger")
+        return redirect(url_for("orders.index"))
+    # Staff chỉ xem được hóa đơn của mình
+    if not current_user.is_admin and order.created_by != current_user.username:
+        flash("Bạn không có quyền xem hóa đơn này.", "danger")
+        return redirect(url_for("orders.index"))
+    return render_template("orders/invoice.html", order=order)
 
 
 @order_bp.route("/api/product/<product_id>")

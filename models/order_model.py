@@ -1,6 +1,6 @@
 """Order (invoice) model."""
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class Order:
@@ -9,7 +9,7 @@ class Order:
         self.order_code = data.get("order_code", "")
         self.customer_id = data.get("customer_id")
         self.customer_name = data.get("customer_name", "")
-        self.items = data.get("items", [])  # [{product_id, name, price, qty, subtotal}]
+        self.items = data.get("items", [])
         self.total = data.get("total", 0)
         self.status = data.get("status", "paid")
         self.note = data.get("note", "")
@@ -30,6 +30,18 @@ class Order:
         return [cls(o) for o in db.orders.find(query).sort("created_at", -1)]
 
     @classmethod
+    def get_by_staff(cls, db, username, start=None, end=None):
+        """Lấy hóa đơn của một nhân viên cụ thể."""
+        query = {"created_by": username}
+        if start or end:
+            query["created_at"] = {}
+            if start:
+                query["created_at"]["$gte"] = start
+            if end:
+                query["created_at"]["$lte"] = end
+        return [cls(o) for o in db.orders.find(query).sort("created_at", -1)]
+
+    @classmethod
     def get_by_id(cls, db, order_id):
         try:
             data = db.orders.find_one({"_id": ObjectId(order_id)})
@@ -39,7 +51,6 @@ class Order:
 
     @classmethod
     def create(cls, db, customer_id, customer_name, items, total, note="", created_by=""):
-        # Generate order code
         count = db.orders.count_documents({})
         order_code = f"HD{datetime.utcnow().strftime('%Y%m')}{count+1:04d}"
         doc = {
@@ -58,9 +69,11 @@ class Order:
         return cls(doc)
 
     @classmethod
-    def monthly_revenue(cls, db):
-        """Aggregate revenue by month for the past 12 months."""
+    def monthly_revenue(cls, db, months=24):
+        """Aggregate revenue by month. BUG-FIX: filter to last N months so old data doesn't skew forecast."""
+        cutoff = datetime.utcnow() - timedelta(days=months * 31)
         pipeline = [
+            {"$match": {"created_at": {"$gte": cutoff}}},
             {"$group": {
                 "_id": {
                     "year": {"$year": "$created_at"},
@@ -70,7 +83,7 @@ class Order:
                 "count": {"$sum": 1},
             }},
             {"$sort": {"_id.year": 1, "_id.month": 1}},
-            {"$limit": 24},
+            {"$limit": months},
         ]
         return list(db.orders.aggregate(pipeline))
 

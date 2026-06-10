@@ -31,33 +31,43 @@
 <!-- Metric cards -->
 {% if forecast.has_data %}
 <div class="row g-4 mb-4">
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="stat-card stat-card-blue animate__animated animate__fadeInUp">
       <div class="stat-icon"><i class="fas fa-brain"></i></div>
       <div class="stat-body">
         <div class="stat-label">Mô hình</div>
-        <div class="stat-value" style="font-size:1.4rem">Linear Regression</div>
-        <div class="stat-sub">scikit-learn</div>
+        <div class="stat-value" style="font-size:1.2rem">Linear Regression</div>
+        <div class="stat-sub">{{ forecast.n_train }} tháng dữ liệu huấn luyện</div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
       <div class="stat-icon"><i class="fas fa-bullseye"></i></div>
       <div class="stat-body">
         <div class="stat-label">MAE</div>
         <div class="stat-value counter" data-target="{{ forecast.mae|int }}">0</div>
-        <div class="stat-sub">Mean Absolute Error (₫)</div>
+        <div class="stat-sub">Sai số tuyệt đối trung bình (₫)</div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.2s">
       <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
       <div class="stat-body">
         <div class="stat-label">R² Score</div>
         <div class="stat-value">{{ "%.3f"|format(forecast.r2) }}</div>
-        <div class="stat-sub">Độ chính xác mô hình</div>
+        <div class="stat-sub">Hệ số xác định</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card stat-card-orange animate__animated animate__fadeInUp" style="animation-delay:.3s">
+      <div class="stat-icon"><i class="fas fa-database"></i></div>
+      <div class="stat-body">
+        <div class="stat-label">Dữ liệu huấn luyện</div>
+        <div class="stat-value">{{ forecast.n_train }} tháng</div>
+        <div class="stat-sub">Càng nhiều tháng, dự báo càng chính xác</div>
       </div>
     </div>
   </div>
@@ -101,17 +111,24 @@
   <div class="col-md-6">
     <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.5s">
       <div class="card-custom-header">
-        <h6 class="mb-0"><i class="fas fa-info-circle me-2 text-info"></i>Thông tin mô hình</h6>
+        <h6 class="mb-0"><i class="fas fa-info-circle me-2 text-info"></i>Đánh giá độ chính xác mô hình</h6>
       </div>
       <div class="card-custom-body">
-        <p><strong>Thuật toán:</strong> Linear Regression</p>
-        <p><strong>Số tháng huấn luyện:</strong> {{ forecast.actual_labels|length }}</p>
-        <p><strong>MAE:</strong> {{ "{:,.0f}".format(forecast.mae) }} ₫</p>
-        <p><strong>RMSE:</strong> {{ "{:,.0f}".format(forecast.rmse) }} ₫</p>
-        <p class="mb-0"><strong>R² Score:</strong> {{ "%.4f"|format(forecast.r2) }}
-          <span class="text-muted">
-            ({{ "Tốt" if forecast.r2 > 0.8 else "Trung bình" if forecast.r2 > 0.5 else "Cần thêm dữ liệu" }})
-          </span>
+        <p><strong><i class="fas fa-cogs me-1 text-muted"></i>Thuật toán:</strong> Linear Regression</p>
+        <p><strong><i class="fas fa-database me-1 text-muted"></i>Số tháng huấn luyện:</strong> {{ forecast.n_train }}</p>
+        <p>
+          <strong><i class="fas fa-ruler me-1 text-muted"></i>MAE:</strong> {{ "{:,.0f}".format(forecast.mae) }} ₫
+          <small class="text-muted d-block">Sai số tuyệt đối trung bình giữa giá trị thực và dự đoán.</small>
+        </p>
+        <p>
+          <strong><i class="fas fa-wave-square me-1 text-muted"></i>RMSE:</strong> {{ "{:,.0f}".format(forecast.rmse) }} ₫
+          <small class="text-muted d-block">Sai số bình phương trung bình — phạt nặng các sai lệch lớn.</small>
+        </p>
+        <p class="mb-0">
+          <strong><i class="fas fa-percentage me-1 text-muted"></i>R² Score:</strong> {{ "%.4f"|format(forecast.r2) }}
+          <small class="text-muted d-block">
+            Hệ số xác định — đo mức độ dữ liệu phù hợp với đường hồi quy. Giá trị thấp khi dữ liệu có nhiều biến động theo mùa; cần ít nhất 12+ tháng để đạt độ tin cậy cao.
+          </small>
         </p>
       </div>
     </div>
@@ -133,7 +150,6 @@
 
 {% block extra_js %}
 {% if forecast.has_data %}
-<!-- Truyền dữ liệu qua thẻ JSON riêng, tránh xung đột Jinja2 với JS -->
 <script id="forecastData" type="application/json">
 {
   "actualLabels":   {{ forecast.actual_labels   | tojson }},
@@ -153,20 +169,18 @@
   var forecastLabels = fd.forecastLabels;
   var forecastValues = fd.forecastValues;
 
-  var allLabels   = actualLabels.concat(forecastLabels);
+  var allLabels = actualLabels.concat(forecastLabels);
 
-  /* Padding: đường thực tế kết thúc ở điểm cuối, phần còn lại null */
   var actualPad = actualValues.concat(
     new Array(forecastLabels.length).fill(null)
   );
 
-  /* Padding: đường dự báo bắt đầu từ điểm cuối thực tế để nối liền */
   var forecastPad = new Array(actualLabels.length - 1).fill(null)
     .concat([actualValues[actualValues.length - 1]])
     .concat(forecastValues);
 
-  var canvas     = document.getElementById("forecastChart");
-  var canvasCtx  = canvas.getContext("2d");
+  var canvas    = document.getElementById("forecastChart");
+  var canvasCtx = canvas.getContext("2d");
 
   new Chart(canvasCtx, {
     type: "line",

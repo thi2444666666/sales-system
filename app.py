@@ -39,6 +39,7 @@ def create_app(config_name="default"):
     from controllers.customer_controller import customer_bp
     from controllers.order_controller import order_bp
     from controllers.forecast_controller import forecast_bp
+    from controllers.cart_controller import cart_bp
 
     app.register_blueprint(auth_bp,       url_prefix="/auth")
     app.register_blueprint(dashboard_bp,  url_prefix="/")
@@ -46,6 +47,7 @@ def create_app(config_name="default"):
     app.register_blueprint(customer_bp,   url_prefix="/customers")
     app.register_blueprint(order_bp,      url_prefix="/orders")
     app.register_blueprint(forecast_bp,   url_prefix="/forecast")
+    app.register_blueprint(cart_bp,       url_prefix="/cart")
 
     # ── Error handlers ─────────────────────────────────────────────────────────
     @app.errorhandler(404)

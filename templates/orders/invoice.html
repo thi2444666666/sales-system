@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Hóa đơn {{ order.order_code }}{% endblock %}
+{% block page_title %}Xuất hóa đơn{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    .invoice-wrapper { box-shadow: none !important; border: none !important; }
+    body { background: white !important; }
+    .sidebar, .topbar { display: none !important; }
+    .main-content { margin: 0 !important; padding: 0 !important; }
+  }
+  .invoice-wrapper {
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.10);
+    overflow: hidden;
+  }
+  .invoice-header {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    padding: 40px 48px 32px;
+  }
+  .invoice-header .company-name {
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .invoice-header .invoice-title {
+    font-size: 1rem;
+    opacity: 0.85;
+  }
+  .invoice-meta {
+    background: #f8fafc;
+    padding: 24px 48px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .invoice-meta .meta-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #94a3b8;
+    font-weight: 700;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .invoice-meta .meta-group span {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+  }
+  .invoice-body { padding: 32px 48px; }
+  .invoice-table th {
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 16px;
+    border: none;
+  }
+  .invoice-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+  .invoice-table tbody tr:last-child td { border-bottom: none; }
+  .invoice-total {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-top: 24px;
+  }
+  .invoice-total .total-label { color: #64748b; font-size: 0.9rem; }
+  .invoice-total .total-value { font-size: 1.6rem; font-weight: 800; color: #6366f1; }
+  .invoice-footer {
+    padding: 24px 48px;
+    border-top: 1px solid #e2e8f0;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+  }
+  .status-badge {
+    display: inline-block;
+    background: #dcfce7;
+    color: #16a34a;
+    border-radius: 99px;
+    padding: 4px 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="no-print mb-3 d-flex gap-2 justify-content-end">
+  <a href="{{ url_for('orders.detail', order_id=order._id) }}" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i>Quay lại
+  </a>
+  <button onclick="window.print()" class="btn btn-primary">
+    <i class="fas fa-print me-2"></i>In hóa đơn
+  </button>
+</div>
+
+<div class="invoice-wrapper animate__animated animate__fadeInUp">
+  <!-- Header -->
+  <div class="invoice-header">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <div class="company-name"><i class="fas fa-chart-line me-2"></i>SalesManager</div>
+        <div class="invoice-title mt-1">Hệ thống quản lý bán hàng</div>
+      </div>
+      <div class="text-end">
+        <div style="font-size:0.8rem;opacity:0.7;text-transform:uppercase;letter-spacing:1px">Hóa đơn</div>
+        <div style="font-size:1.5rem;font-weight:800">{{ order.order_code }}</div>
+        <div class="mt-1"><span class="status-badge">Đã thanh toán</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Meta -->
+  <div class="invoice-meta">
+    <div class="meta-group">
+      <label>Ngày lập hóa đơn</label>
+      <span>{{ order.created_at.strftime("%d/%m/%Y %H:%M") if order.created_at else "—" }}</span>
+    </div>
+    <div class="meta-group">
+      <label>Khách hàng</label>
+      <span>{{ order.customer_name or "Khách lẻ" }}</span>
+    </div>
+    <div class="meta-group">
+      <label>Nhân viên tạo</label>
+      <span>{{ order.created_by or "—" }}</span>
+    </div>
+    <div class="meta-group">
+      <label>Số mặt hàng</label>
+      <span>{{ order.items|length }} sản phẩm</span>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="invoice-body">
+    <table class="table invoice-table w-100 mb-0">
+      <thead>
+        <tr>
+          <th style="width:40px">#</th>
+          <th>Tên sản phẩm</th>
+          <th class="text-end">Đơn giá</th>
+          <th class="text-center">Số lượng</th>
+          <th class="text-end">Thành tiền</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in order.items %}
+        <tr>
+          <td class="text-muted">{{ loop.index }}</td>
+          <td class="fw-600">{{ item.name }}</td>
+          <td class="text-end text-muted">{{ "{:,.0f}".format(item.price) }} ₫</td>
+          <td class="text-center">
+            <span class="badge bg-light text-dark border">× {{ item.qty }}</span>
+          </td>
+          <td class="text-end fw-600 text-primary">{{ "{:,.0f}".format(item.subtotal) }} ₫</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="invoice-total">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="total-label">Tổng cộng thanh toán</div>
+          {% if order.note %}
+          <div class="text-muted small mt-1"><i class="fas fa-sticky-note me-1"></i>{{ order.note }}</div>
+          {% endif %}
+        </div>
+        <div class="total-value">{{ "{:,.0f}".format(order.total) }} ₫</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="invoice-footer">
+    <i class="fas fa-check-circle text-success me-1"></i>
+    Hóa đơn này đã được thanh toán đầy đủ &bull;
+    In lúc {{ "now" | replace("now", "") }}
+    <script>document.currentScript.previousSibling.textContent += new Date().toLocaleString("vi-VN");</script>
+    &bull; SalesManager &copy; {{ order.created_at.year if order.created_at else 2025 }}
+  </div>
+</div>
+{% endblock %}

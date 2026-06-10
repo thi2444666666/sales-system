@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Giỏ hàng{% endblock %}
+{% block page_title %}Giỏ hàng{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h4 class="mb-0">Giỏ hàng</h4>
+    <small class="text-muted">{{ cart|length }} sản phẩm</small>
+  </div>
+  <a href="{{ url_for('products.index') }}" class="btn btn-outline-primary">
+    <i class="fas fa-arrow-left me-2"></i>Tiếp tục mua
+  </a>
+</div>
+
+{% if cart %}
+<div class="row g-4">
+  <!-- Danh sách sản phẩm trong giỏ -->
+  <div class="col-lg-8">
+    <div class="card-custom">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Sản phẩm đã chọn</h6>
+        <form method="POST" action="{{ url_for('orders.cart_clear') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="btn btn-sm btn-outline-danger"
+                  onclick="return confirm('Xóa toàn bộ giỏ hàng?')">
+            <i class="fas fa-trash me-1"></i>Xóa tất cả
+          </button>
+        </form>
+      </div>
+      <div class="card-custom-body p-0">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th>
+              <th class="text-center">Đơn giá</th>
+              <th class="text-center">Số lượng</th>
+              <th class="text-end">Thành tiền</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in cart %}
+            <tr>
+              <td>
+                <strong>{{ item.name }}</strong>
+              </td>
+              <td class="text-center">{{ "{:,.0f}".format(item.price) }} ₫</td>
+              <td class="text-center">{{ item.qty }}</td>
+              <td class="text-end text-primary fw-600">{{ "{:,.0f}".format(item.subtotal) }} ₫</td>
+              <td class="text-end">
+                <form method="POST" action="{{ url_for('orders.cart_remove', product_id=item.product_id) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="table-light">
+              <td colspan="3" class="fw-600 text-end">Tổng cộng:</td>
+              <td class="text-end fw-700 text-primary fs-5">{{ "{:,.0f}".format(total) }} ₫</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form thanh toán -->
+  <div class="col-lg-4">
+    <div class="card-custom">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-cash-register me-2"></i>Thanh toán</h6>
+      </div>
+      <div class="card-custom-body">
+        <form method="POST" action="{{ url_for('orders.cart_checkout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <div class="mb-3">
+            <label class="form-label fw-600">Khách hàng</label>
+            <select class="form-select" name="customer_id">
+              <option value="">-- Khách lẻ --</option>
+              {% for c in customers %}
+              <option value="{{ c._id }}">{{ c.name }} ({{ c.phone }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-600">Tên khách (nếu chưa có)</label>
+            <input type="text" class="form-control" name="customer_name" placeholder="Nhập tên khách..."/>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-600">Ghi chú</label>
+            <input type="text" class="form-control" name="note" placeholder="Ghi chú hóa đơn..."/>
+          </div>
+
+          <div class="order-total-box mb-3">
+            <span>Tổng tiền:</span>
+            <span class="total-amount">{{ "{:,.0f}".format(total) }} ₫</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 btn-lg">
+            <i class="fas fa-check-circle me-2"></i>Xác nhận thanh toán
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="card-custom">
+  <div class="card-custom-body text-center py-5">
+    <i class="fas fa-shopping-cart fa-4x text-muted mb-3"></i>
+    <p class="text-muted fs-5">Giỏ hàng trống</p>
+    <a href="{{ url_for('products.index') }}" class="btn btn-primary">
+      <i class="fas fa-plus me-2"></i>Thêm sản phẩm
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -19,6 +19,9 @@ def index():
 @customer_bp.route("/create", methods=["GET", "POST"])
 @login_required
 def create():
+    if not current_user.is_admin:
+        flash("Bạn không có quyền thêm khách hàng.", "danger")
+        return redirect(url_for("customers.index"))
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip()
@@ -39,6 +42,9 @@ def create():
 @customer_bp.route("/edit/<customer_id>", methods=["GET", "POST"])
 @login_required
 def edit(customer_id):
+    if not current_user.is_admin:
+        flash("Bạn không có quyền sửa khách hàng.", "danger")
+        return redirect(url_for("customers.index"))
     db = current_app.db
     customer = Customer.get_by_id(db, customer_id)
     if not customer:
