@@ -1,6 +1,9 @@
 """
 seed_service.py — Nạp dữ liệu mẫu thực tế cho hệ thống.
-50 sản phẩm (10 danh mục), 30 khách hàng, 100+ hóa đơn trải đều 12 tháng.
+50 sản phẩm (10 danh mục), 30 khách hàng, ~300+ hóa đơn trải đều 36 THÁNG
+(3 năm) với pattern mùa vụ rõ ràng — đủ 3 chu kỳ mùa vụ liên tiếp để
+Random Forest học được feature "month" và "quarter" là quy luật ổn định,
+thay vì chỉ trùng hợp ngẫu nhiên (chuẩn time series cần ≥2-3 chu kỳ).
 """
 from datetime import datetime, timedelta
 import random
@@ -304,7 +307,7 @@ def seed_data(db):
             "stock":       int(p["stock"]),
             "description": p["description"],
             "image":       p["image"],
-            "created_at":  now - timedelta(days=random.randint(30, 365)),
+            "created_at":  now - timedelta(days=random.randint(1100, 1150)),
             "updated_at":  now,
         })
         product_records.append({
@@ -325,31 +328,58 @@ def seed_data(db):
             "phone":       phone,
             "address":     address,
             "total_spent": 0.0,
-            "created_at":  now - timedelta(days=random.randint(7, 500)),
+            "created_at":  now - timedelta(days=random.randint(7, 1130)),
         })
         customer_records.append({"id": str(r.inserted_id), "name": name})
     print(f"   ✔ {len(CUSTOMERS)} khách hàng")
 
-    # ── Orders — đúng 100 hóa đơn, trải đều 12 tháng ─────────────────────────
-    # Phân bổ có xu hướng tăng nhẹ để Linear Regression có slope dương
-    monthly_counts = [5, 6, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11]  # tổng = 100
-    random.shuffle(monthly_counts[2:8])  # xáo nhẹ giữa cho tự nhiên
+    # ── Orders — 300+ hóa đơn, trải đều 36 THÁNG (3 năm) ─────────────────────
+    # Lý do mở rộng từ 24 → 36 tháng:
+    # Quy tắc chung trong time series forecasting là cần tối thiểu 2-3 CHU
+    # KỲ MÙA VỤ ĐẦY ĐỦ để mô hình tách được "tín hiệu mùa vụ" khỏi "nhiễu
+    # ngẫu nhiên" một cách đáng tin. Với 24 tháng (2 năm), mỗi giá trị
+    # month chỉ lặp lại 2 lần — về thống kê, 2 điểm chưa đủ để khẳng định
+    # một quy luật (có thể là trùng hợp). Với 36 tháng (3 năm), mỗi tháng
+    # dương lịch (1, 2, ..., 12) xuất hiện đúng 3 lần ở ba năm liên tiếp →
+    # Random Forest có đủ chu kỳ lặp để nhận ra ví dụ "tháng 11-12 luôn cao
+    # điểm" là một QUY LUẬT ổn định, không phải ngẫu nhiên một lần.
+    #
+    # base_pattern: hệ số nhân theo tháng dương lịch (index 0 = tháng 1).
+    # Mùa cao điểm: tháng 11-12 (mua sắm cuối năm) và tháng 6-7 (hè).
+    # Mùa thấp điểm: tháng 1-2 (sau Tết, chi tiêu giảm).
+    base_pattern = {
+        1: 0.65, 2: 0.70, 3: 0.85, 4: 0.90, 5: 0.95, 6: 1.15,
+        7: 1.20, 8: 1.00, 9: 0.95, 10: 1.05, 11: 1.35, 12: 1.45,
+    }
+
+    N_MONTHS = 36          # 3 năm dữ liệu lịch sử — đủ 3 chu kỳ mùa vụ
+    BASE_ORDERS_PER_MONTH = 8   # số đơn trung bình/tháng trước khi áp hệ số mùa vụ
+    YOY_GROWTH = 0.15       # tăng trưởng theo năm (năm sau cao hơn năm trước ~15%)
 
     order_count = 1
     total_created = 0
 
-    for offset, n_orders in enumerate(reversed(monthly_counts)):
-        # offset 0 = tháng xa nhất (11 tháng trước), offset 11 = tháng hiện tại
-        months_back = len(monthly_counts) - 1 - offset
-
-        # Tính năm/tháng đích
+    for months_back in range(N_MONTHS - 1, -1, -1):
+        # months_back = 23 → tháng xa nhất (2 năm trước); 0 → tháng hiện tại
         target_month = now.month - months_back
-        target_year = now.year
+        target_year  = now.year
         while target_month <= 0:
             target_month += 12
-            target_year -= 1
+            target_year  -= 1
 
         days_in_month = calendar.monthrange(target_year, target_month)[1]
+
+        # Hệ số mùa vụ của tháng dương lịch này
+        seasonal = base_pattern[target_month]
+
+        # Hệ số tăng trưởng theo năm: năm gần đây nhân hệ số cao hơn
+        years_ago = months_back // 12  # 0 = năm nay, 1 = năm trước
+        growth = (1 + YOY_GROWTH) ** (1 - years_ago)
+
+        # Nhiễu ngẫu nhiên nhẹ (±15%) để dữ liệu không quá "đẹp", giống thực tế
+        noise = random.uniform(0.85, 1.15)
+
+        n_orders = max(2, round(BASE_ORDERS_PER_MONTH * seasonal * growth * noise))
 
         for _ in range(n_orders):
             day    = random.randint(1, days_in_month)
@@ -409,7 +439,7 @@ def seed_data(db):
             order_count  += 1
             total_created += 1
 
-    print(f"   ✔ {total_created} hóa đơn trải đều 12 tháng")
+    print(f"   ✔ {total_created} hóa đơn trải đều {N_MONTHS} tháng (3 năm, có mùa vụ)")
     print()
     print("=" * 52)
     print("✅  SEED HOÀN TẤT! Thông tin đăng nhập:")

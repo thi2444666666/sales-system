@@ -14,3 +14,5 @@ python-dotenv==1.2.2
 requests==2.32.3
 Pillow==11.2.1
 gunicorn==21.2.0
+reportlab==4.4.10
+openpyxl==3.1.5

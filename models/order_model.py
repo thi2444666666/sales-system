@@ -69,8 +69,11 @@ class Order:
         return cls(doc)
 
     @classmethod
-    def monthly_revenue(cls, db, months=24):
-        """Aggregate revenue by month. BUG-FIX: filter to last N months so old data doesn't skew forecast."""
+    def monthly_revenue(cls, db, months=36):
+        """Aggregate revenue by month. months=36 khớp với seed_service.py
+        (3 năm dữ liệu). $limit dùng đúng biến months để nhất quán với
+        cutoff — tránh trường hợp cutoff cho qua N tháng nhưng limit cắt
+        bớt còn ít hơn N."""
         cutoff = datetime.utcnow() - timedelta(days=months * 31)
         pipeline = [
             {"$match": {"created_at": {"$gte": cutoff}}},

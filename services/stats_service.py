@@ -48,9 +48,12 @@ def get_dashboard_stats(db):
     out_of_stock = db.products.count_documents({"stock": 0})
     low_stock = db.products.count_documents({"stock": {"$gt": 0, "$lt": 10}})
 
-    # Monthly revenue for chart (last 12 months)
+    # Monthly revenue for chart (last 12 months) — truyền rõ months=12,
+    # không dùng default của Order.monthly_revenue() (giờ là 36, phục vụ
+    # forecast_service.py) để dashboard tổng quan vẫn đúng ý định ban đầu:
+    # chỉ hiển thị 12 tháng gần nhất cho gọn, không phải toàn bộ 3 năm.
     from models.order_model import Order
-    monthly = Order.monthly_revenue(db)
+    monthly = Order.monthly_revenue(db, months=12)
     chart_labels = [f"{r['_id']['month']}/{r['_id']['year']}" for r in monthly]
     chart_data = [r["revenue"] for r in monthly]
 

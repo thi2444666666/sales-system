@@ -1,155 +1,724 @@
 {% extends "base.html" %}
 {% block title %}Dự báo doanh thu{% endblock %}
 {% block page_title %}Dự báo doanh thu AI{% endblock %}
+
+{% block extra_css %}
+<style>
+  .nav-tabs-custom { border-bottom: 2px solid var(--border); gap: 4px; flex-wrap: wrap; }
+  .nav-tabs-custom .nav-link {
+    border: none; border-radius: 10px 10px 0 0; color: var(--text-muted);
+    font-weight: 600; font-size: .88rem; padding: 12px 18px; transition: all .2s;
+  }
+  .nav-tabs-custom .nav-link:hover { background: rgba(99,102,241,.06); color: var(--primary); }
+  .nav-tabs-custom .nav-link.active {
+    color: var(--primary); background: rgba(99,102,241,.08);
+    border-bottom: 3px solid var(--primary); margin-bottom: -2px;
+  }
+  .badge-count { font-size: .68rem; padding: 2px 7px; margin-left: 6px; }
+  .r2-bar-track { background: #eef0f6; border-radius: 8px; height: 12px; overflow: hidden; }
+  .r2-bar-fill { height: 100%; border-radius: 8px; transition: width .6s ease; }
+  .product-check-item {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+    margin-bottom: 8px; cursor: pointer; transition: all .15s; display: flex;
+    align-items: center; gap: 10px;
+  }
+  .product-check-item:hover { border-color: var(--primary); background: rgba(99,102,241,.04); }
+  .product-check-item.checked { border-color: var(--primary); background: rgba(99,102,241,.08); }
+  .empty-hint { text-align: center; padding: 50px 20px; color: var(--text-muted); }
+  .empty-hint i { color: #c7cbe0; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .product-scroll-box { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+</style>
+{% endblock %}
+
 {% block content %}
 
-<!-- Form chọn số tháng dự báo -->
-<div class="card-custom animate__animated animate__fadeInUp mb-4">
-  <div class="card-custom-header">
-    <h6 class="mb-0"><i class="fas fa-sliders-h me-2 text-primary"></i>Cấu hình dự báo</h6>
-  </div>
-  <div class="card-custom-body">
-    <form method="POST" class="row g-3 align-items-end">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-      <div class="col-md-4">
-        <label class="form-label fw-bold">Số tháng dự báo</label>
-        <select class="form-select" name="months_ahead">
-          {% for i in range(1, 13) %}
-          <option value="{{ i }}" {% if forecast.months_ahead == i %}selected{% endif %}>{{ i }} tháng</option>
-          {% endfor %}
-        </select>
+<!-- ════════════════════════════════════════════════════════════════════
+     TAB NAVIGATION — 5 khu vực theo lộ trình nâng cấp 9+
+     ════════════════════════════════════════════════════════════════════ -->
+<ul class="nav nav-tabs nav-tabs-custom mb-4" id="forecastTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'total' %}active{% endif %}" id="tab-btn-total"
+            data-bs-toggle="tab" data-bs-target="#tab-total" type="button">
+      <i class="fas fa-chart-line me-1"></i> Tổng doanh thu
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'product' %}active{% endif %}" id="tab-btn-product"
+            data-bs-toggle="tab" data-bs-target="#tab-product" type="button">
+      <i class="fas fa-box me-1"></i> Theo sản phẩm
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'compare' %}active{% endif %}" id="tab-btn-compare"
+            data-bs-toggle="tab" data-bs-target="#tab-compare" type="button">
+      <i class="fas fa-balance-scale me-1"></i> So sánh sản phẩm
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'inventory' %}active{% endif %}" id="tab-btn-inventory"
+            data-bs-toggle="tab" data-bs-target="#tab-inventory" type="button">
+      <i class="fas fa-warehouse me-1"></i> Cảnh báo tồn kho
+      {% if inventory and (inventory.total_out + inventory.total_low) > 0 %}
+      <span class="badge bg-danger badge-count">{{ inventory.total_out + inventory.total_low }}</span>
+      {% endif %}
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'history' %}active{% endif %}" id="tab-btn-history"
+            data-bs-toggle="tab" data-bs-target="#tab-history" type="button">
+      <i class="fas fa-history me-1"></i> Lịch sử độ chính xác
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="forecastTabsContent">
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TAB 1 — TỔNG DOANH THU (Linear Regression / Random Forest)
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade {% if active_tab == 'total' %}show active{% endif %}" id="tab-total" role="tabpanel">
+
+    <div class="card-custom animate__animated animate__fadeInUp mb-4">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-sliders-h me-2 text-primary"></i>Cấu hình dự báo</h6>
+      </div>
+      <div class="card-custom-body">
+        <form method="POST" class="row g-3 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <input type="hidden" name="tab" value="total"/>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Số tháng dự báo</label>
+            <select class="form-select" name="months_ahead">
+              {% for i in range(1, 13) %}
+              <option value="{{ i }}" {% if forecast.months_ahead == i %}selected{% endif %}>{{ i }} tháng</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Mô hình dự báo</label>
+            <select class="form-select" name="model_type">
+              <option value="linear" {% if forecast.model_type == 'linear' %}selected{% endif %}>Linear Regression</option>
+              <option value="random_forest" {% if forecast.model_type == 'random_forest' %}selected{% endif %}>Random Forest Regressor</option>
+            </select>
+            <small class="text-muted">Random Forest cần tối thiểu 4 tháng dữ liệu.</small>
+          </div>
+          <div class="col-md-3">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-play me-2"></i>Thực hiện dự báo
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if forecast.has_data %}
+    <div class="row g-4 mb-4">
+      <div class="col-md-3">
+        <div class="stat-card stat-card-blue animate__animated animate__fadeInUp">
+          <div class="stat-icon"><i class="fas fa-brain"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Mô hình</div>
+            <div class="stat-value" style="font-size:1.2rem">{{ "Random Forest" if forecast.model_type == "random_forest" else "Linear Regression" }}</div>
+            <div class="stat-sub">{{ forecast.n_train }} tháng dữ liệu huấn luyện</div>
+          </div>
+        </div>
       </div>
       <div class="col-md-3">
-        <button type="submit" class="btn btn-primary w-100">
-          <i class="fas fa-play me-2"></i>Thực hiện dự báo
-        </button>
+        <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
+          <div class="stat-icon"><i class="fas fa-bullseye"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">MAE</div>
+            <div class="stat-value counter" data-target="{{ forecast.mae|int }}">0</div>
+            <div class="stat-sub">Sai số tuyệt đối trung bình (₫)</div>
+          </div>
+        </div>
       </div>
-    </form>
-  </div>
-</div>
+      <div class="col-md-3">
+        <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.2s">
+          <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">R² Score</div>
+            <div class="stat-value">{{ "%.3f"|format(forecast.r2) }}</div>
+            <div class="stat-sub">Hệ số xác định</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card stat-card-orange animate__animated animate__fadeInUp" style="animation-delay:.3s">
+          <div class="stat-icon"><i class="fas fa-database"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Dữ liệu huấn luyện</div>
+            <div class="stat-value">{{ forecast.n_train }} tháng</div>
+            <div class="stat-sub">Càng nhiều tháng, dự báo càng chính xác</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<!-- Metric cards -->
-{% if forecast.has_data %}
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="stat-card stat-card-blue animate__animated animate__fadeInUp">
-      <div class="stat-icon"><i class="fas fa-brain"></i></div>
-      <div class="stat-body">
-        <div class="stat-label">Mô hình</div>
-        <div class="stat-value" style="font-size:1.2rem">Linear Regression</div>
-        <div class="stat-sub">{{ forecast.n_train }} tháng dữ liệu huấn luyện</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
-      <div class="stat-icon"><i class="fas fa-bullseye"></i></div>
-      <div class="stat-body">
-        <div class="stat-label">MAE</div>
-        <div class="stat-value counter" data-target="{{ forecast.mae|int }}">0</div>
-        <div class="stat-sub">Sai số tuyệt đối trung bình (₫)</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.2s">
-      <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
-      <div class="stat-body">
-        <div class="stat-label">R² Score</div>
-        <div class="stat-value">{{ "%.3f"|format(forecast.r2) }}</div>
-        <div class="stat-sub">Hệ số xác định</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card stat-card-orange animate__animated animate__fadeInUp" style="animation-delay:.3s">
-      <div class="stat-icon"><i class="fas fa-database"></i></div>
-      <div class="stat-body">
-        <div class="stat-label">Dữ liệu huấn luyện</div>
-        <div class="stat-value">{{ forecast.n_train }} tháng</div>
-        <div class="stat-sub">Càng nhiều tháng, dự báo càng chính xác</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Forecast chart -->
-<div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.3s">
-  <div class="card-custom-header">
-    <div>
-      <h6 class="mb-0"><i class="fas fa-chart-area me-2 text-primary"></i>Biểu đồ dự báo doanh thu</h6>
-      <small class="text-muted">Thực tế vs Dự báo {{ forecast.months_ahead }} tháng tiếp theo</small>
-    </div>
-  </div>
-  <div class="card-custom-body">
-    <canvas id="forecastChart" height="80"></canvas>
-  </div>
-</div>
-
-<!-- Forecast table + model info -->
-<div class="row g-4 mt-2">
-  <div class="col-md-6">
-    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.4s">
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.3s">
       <div class="card-custom-header">
-        <h6 class="mb-0"><i class="fas fa-calendar-alt me-2 text-success"></i>Dự báo các tháng tới</h6>
+        <div>
+          <h6 class="mb-0"><i class="fas fa-chart-area me-2 text-primary"></i>Biểu đồ dự báo doanh thu</h6>
+          <small class="text-muted">Thực tế vs Dự báo {{ forecast.months_ahead }} tháng tiếp theo</small>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('forecast.export_pdf', scope='total', months_ahead=forecast.months_ahead, model_type=forecast.model_type) }}"
+             class="btn btn-sm btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>Xuất PDF</a>
+          <a href="{{ url_for('forecast.export_excel', scope='total', months_ahead=forecast.months_ahead, model_type=forecast.model_type) }}"
+             class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel me-1"></i>Xuất Excel</a>
+        </div>
+      </div>
+      <div class="card-custom-body">
+        <canvas id="forecastChart" height="80"></canvas>
+      </div>
+    </div>
+
+    <div class="row g-4 mt-2">
+      <div class="col-md-6">
+        <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.4s">
+          <div class="card-custom-header">
+            <h6 class="mb-0"><i class="fas fa-calendar-alt me-2 text-success"></i>Dự báo các tháng tới</h6>
+          </div>
+          <div class="card-custom-body p-0">
+            <table class="table table-custom mb-0">
+              <thead><tr><th>Tháng</th><th class="text-end">Dự báo doanh thu</th></tr></thead>
+              <tbody>
+                {% for i in range(forecast.forecast_labels|length) %}
+                <tr>
+                  <td><i class="fas fa-calendar me-2 text-primary"></i>Tháng {{ forecast.forecast_labels[i] }}</td>
+                  <td class="text-end fw-bold text-success">{{ "{:,.0f}".format(forecast.forecast_values[i]) }} ₫</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.5s">
+          <div class="card-custom-header">
+            <h6 class="mb-0"><i class="fas fa-info-circle me-2 text-info"></i>Đánh giá độ chính xác mô hình</h6>
+          </div>
+          <div class="card-custom-body">
+            <p><strong><i class="fas fa-cogs me-1 text-muted"></i>Thuật toán:</strong> {{ "Random Forest Regressor" if forecast.model_type == "random_forest" else "Linear Regression" }}</p>
+            <p><strong><i class="fas fa-database me-1 text-muted"></i>Số tháng huấn luyện:</strong> {{ forecast.n_train }}</p>
+            <p>
+              <strong><i class="fas fa-ruler me-1 text-muted"></i>MAE:</strong> {{ "{:,.0f}".format(forecast.mae) }} ₫
+              <small class="text-muted d-block">Sai số tuyệt đối trung bình giữa giá trị thực và dự đoán.</small>
+            </p>
+            <p>
+              <strong><i class="fas fa-wave-square me-1 text-muted"></i>RMSE:</strong> {{ "{:,.0f}".format(forecast.rmse) }} ₫
+              <small class="text-muted d-block">Sai số bình phương trung bình — phạt nặng các sai lệch lớn.</small>
+            </p>
+            <p class="mb-0">
+              <strong><i class="fas fa-percentage me-1 text-muted"></i>R² Score:</strong> {{ "%.4f"|format(forecast.r2) }}
+              <small class="text-muted d-block">
+                Hệ số xác định — đo mức độ dữ liệu phù hợp với mô hình. Giá trị thấp khi dữ liệu có nhiều biến động theo mùa; cần ít nhất 12+ tháng để đạt độ tin cậy cao.
+              </small>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if forecast.model_comparison %}
+    <div class="card-custom animate__animated animate__fadeInUp mt-4" style="animation-delay:.6s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-balance-scale me-2 text-warning"></i>So sánh R² giữa các mô hình</h6>
+      </div>
+      <div class="card-custom-body">
+        <div class="row g-4 align-items-center">
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="fw-600">Linear Regression</span>
+              <span class="fw-700">{{ "%.4f"|format(forecast.model_comparison.linear) }}</span>
+            </div>
+            <div class="r2-bar-track">
+              <div class="r2-bar-fill" style="width: {{ (forecast.model_comparison.linear * 100)|round(0,'floor') }}%; background: linear-gradient(90deg,#6366f1,#8b5cf6);"></div>
+            </div>
+            {% if forecast.model_comparison.better == 'linear' %}<span class="badge bg-success mt-2"><i class="fas fa-check me-1"></i>Tốt hơn</span>{% endif %}
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="fw-600">Random Forest</span>
+              <span class="fw-700">{{ "%.4f"|format(forecast.model_comparison.random_forest) }}</span>
+            </div>
+            <div class="r2-bar-track">
+              <div class="r2-bar-fill" style="width: {{ (forecast.model_comparison.random_forest * 100)|round(0,'floor') }}%; background: linear-gradient(90deg,#22c55e,#16a34a);"></div>
+            </div>
+            {% if forecast.model_comparison.better == 'random_forest' %}<span class="badge bg-success mt-2"><i class="fas fa-check me-1"></i>Tốt hơn</span>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="card-custom text-center py-5 animate__animated animate__fadeIn">
+      <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
+      <h5 class="text-muted">{{ forecast.message }}</h5>
+      <p class="text-muted">Hãy tạo thêm đơn hàng để hệ thống có đủ dữ liệu dự báo.</p>
+      <a href="{{ url_for('orders.create') }}" class="btn btn-primary mt-2">
+        <i class="fas fa-plus me-2"></i>Tạo hóa đơn
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TAB 2 — DỰ BÁO THEO TỪNG SẢN PHẨM (AJAX)
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade {% if active_tab == 'product' %}show active{% endif %}" id="tab-product" role="tabpanel">
+
+    {% if product_list and product_list|length > 0 %}
+    <div class="card-custom animate__animated animate__fadeInUp mb-4">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-box me-2 text-primary"></i>Chọn sản phẩm để dự báo</h6>
+      </div>
+      <div class="card-custom-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label fw-bold">Sản phẩm</label>
+            <select class="form-select" id="productSelect">
+              {% for p in product_list %}
+              <option value="{{ p._id }}">{{ p.name }} ({{ "{:,.0f}".format(p.total_revenue) }} ₫ tổng DT)</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold">Số tháng dự báo</label>
+            <select class="form-select" id="productMonthsAhead">
+              {% for i in range(1, 13) %}
+              <option value="{{ i }}" {% if i == 3 %}selected{% endif %}>{{ i }} tháng</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold">Mô hình</label>
+            <select class="form-select" id="productModelType">
+              <option value="auto" selected>Tự động</option>
+              <option value="linear">Linear</option>
+              <option value="random_forest">Random Forest</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <button type="button" class="btn btn-primary w-100" id="btnRunProductForecast">
+              <i class="fas fa-search-dollar me-2"></i>Xem dự báo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="productResultContainer">
+      <div id="productEmptyState" class="card-custom empty-hint">
+        <i class="fas fa-mouse-pointer fa-3x mb-3"></i>
+        <p class="mb-0">Chọn sản phẩm và nhấn "Xem dự báo" để xem chi tiết.</p>
+      </div>
+
+      <div id="productLoading" class="card-custom text-center py-5 d-none">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-3 mb-0">Đang huấn luyện mô hình cho sản phẩm này...</p>
+      </div>
+
+      <div id="productResultBody" class="d-none">
+        <div class="row g-4 mb-4" id="productStatCards">
+          <div class="col-md-3">
+            <div class="stat-card stat-card-blue">
+              <div class="stat-icon"><i class="fas fa-brain"></i></div>
+              <div class="stat-body">
+                <div class="stat-label">Mô hình đã chọn</div>
+                <div class="stat-value" id="pStatModel" style="font-size:1.1rem">—</div>
+                <div class="stat-sub" id="pStatProductName">—</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="stat-card stat-card-green">
+              <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+              <div class="stat-body">
+                <div class="stat-label">R² đã dùng</div>
+                <div class="stat-value" id="pStatR2">—</div>
+                <div class="stat-sub">Hệ số xác định</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="stat-card stat-card-purple">
+              <div class="stat-icon"><i class="fas fa-bullseye"></i></div>
+              <div class="stat-body">
+                <div class="stat-label">MAE</div>
+                <div class="stat-value" id="pStatMae" style="font-size:1.2rem">—</div>
+                <div class="stat-sub">Sai số tuyệt đối TB (₫)</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="stat-card stat-card-orange">
+              <div class="stat-icon"><i class="fas fa-balance-scale"></i></div>
+              <div class="stat-body">
+                <div class="stat-label">R² Linear vs RF</div>
+                <div class="stat-value" id="pStatR2Compare" style="font-size:1.1rem">—</div>
+                <div class="stat-sub">So sánh 2 mô hình</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-custom mb-4">
+          <div class="card-custom-header">
+            <h6 class="mb-0"><i class="fas fa-chart-area me-2 text-primary"></i>Biểu đồ dự báo doanh thu sản phẩm</h6>
+            <div class="d-flex gap-2">
+              <a id="btnExportProductPdf" href="#" class="btn btn-sm btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>Xuất PDF</a>
+              <a id="btnExportProductExcel" href="#" class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel me-1"></i>Xuất Excel</a>
+            </div>
+          </div>
+          <div class="card-custom-body">
+            <canvas id="productChart" height="85"></canvas>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="card-custom">
+              <div class="card-custom-header">
+                <h6 class="mb-0"><i class="fas fa-calendar-alt me-2 text-success"></i>Dự báo doanh thu &amp; số lượng</h6>
+              </div>
+              <div class="card-custom-body p-0">
+                <table class="table table-custom mb-0">
+                  <thead><tr><th>Tháng</th><th class="text-end">Doanh thu</th><th class="text-end">Số lượng</th></tr></thead>
+                  <tbody id="productForecastTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card-custom">
+              <div class="card-custom-header">
+                <h6 class="mb-0"><i class="fas fa-history me-2 text-info"></i>Lịch sử độ chính xác (walk-forward)</h6>
+              </div>
+              <div class="card-custom-body" id="productWalkForwardBody">
+                <p class="text-muted mb-0">Đang chờ dữ liệu...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card-custom text-center py-5 animate__animated animate__fadeIn">
+      <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+      <h5 class="text-muted">Chưa có sản phẩm nào có lịch sử bán hàng.</h5>
+      <p class="text-muted">Tạo vài hóa đơn có sản phẩm để bắt đầu dự báo theo từng sản phẩm.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TAB 3 — SO SÁNH NHIỀU SẢN PHẨM (AJAX)
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade {% if active_tab == 'compare' %}show active{% endif %}" id="tab-compare" role="tabpanel">
+
+    {% if product_list and product_list|length > 0 %}
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="card-custom animate__animated animate__fadeInUp">
+          <div class="card-custom-header">
+            <h6 class="mb-0"><i class="fas fa-tasks me-2 text-primary"></i>Chọn tối đa 5 sản phẩm</h6>
+          </div>
+          <div class="card-custom-body">
+            <div class="product-scroll-box" id="compareProductList">
+              {% for p in product_list %}
+              <label class="product-check-item" data-pid="{{ p._id }}">
+                <input type="checkbox" class="form-check-input compare-checkbox" value="{{ p._id }}" data-name="{{ p.name }}">
+                <span>{{ p.name }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <hr/>
+            <label class="form-label fw-bold">Số tháng dự báo</label>
+            <select class="form-select mb-3" id="compareMonthsAhead">
+              {% for i in range(1, 13) %}
+              <option value="{{ i }}" {% if i == 3 %}selected{% endif %}>{{ i }} tháng</option>
+              {% endfor %}
+            </select>
+            <label class="form-label fw-bold">Mô hình</label>
+            <select class="form-select mb-3" id="compareModelType">
+              <option value="auto" selected>Tự động</option>
+              <option value="linear">Linear</option>
+              <option value="random_forest">Random Forest</option>
+            </select>
+            <button type="button" class="btn btn-primary w-100" id="btnRunCompare">
+              <i class="fas fa-balance-scale me-2"></i>So sánh đã chọn
+            </button>
+            <small class="text-muted d-block mt-2" id="compareSelectedCount">0/5 sản phẩm đã chọn</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-8">
+        <div id="compareResultContainer">
+          <div id="compareEmptyState" class="card-custom empty-hint">
+            <i class="fas fa-balance-scale fa-3x mb-3"></i>
+            <p class="mb-0">Chọn ít nhất 2 sản phẩm rồi nhấn "So sánh đã chọn".</p>
+          </div>
+          <div id="compareLoading" class="card-custom text-center py-5 d-none">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-3 mb-0">Đang chạy mô hình cho từng sản phẩm...</p>
+          </div>
+          <div id="compareResultBody" class="d-none">
+            <div class="card-custom mb-4">
+              <div class="card-custom-header">
+                <h6 class="mb-0"><i class="fas fa-chart-area me-2 text-primary"></i>Xu hướng dự báo</h6>
+              </div>
+              <div class="card-custom-body">
+                <canvas id="compareChart" height="100"></canvas>
+              </div>
+            </div>
+            <div class="card-custom">
+              <div class="card-custom-header">
+                <h6 class="mb-0"><i class="fas fa-table me-2 text-success"></i>Bảng so sánh chi tiết</h6>
+              </div>
+              <div class="card-custom-body p-0">
+                <table class="table table-custom mb-0">
+                  <thead><tr><th>Sản phẩm</th><th>Model</th><th class="text-center">R²</th><th>Dự báo doanh thu theo tháng</th></tr></thead>
+                  <tbody id="compareTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="card-custom text-center py-5 animate__animated animate__fadeIn">
+      <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+      <h5 class="text-muted">Chưa có sản phẩm nào có lịch sử bán hàng để so sánh.</h5>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TAB 4 — CẢNH BÁO TỒN KHO & GỢI Ý NHẬP HÀNG
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade {% if active_tab == 'inventory' %}show active{% endif %}" id="tab-inventory" role="tabpanel">
+
+    <div class="row g-4 mb-4">
+      <div class="col-md-3">
+        <div class="stat-card stat-card-orange animate__animated animate__fadeInUp">
+          <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Hết hàng</div>
+            <div class="stat-value">{{ inventory.total_out }}</div>
+            <div class="stat-sub">sản phẩm đang hết hàng</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.1s">
+          <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Tồn kho thấp</div>
+            <div class="stat-value">{{ inventory.total_low }}</div>
+            <div class="stat-sub">sản phẩm dưới ngưỡng an toàn</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card stat-card-blue animate__animated animate__fadeInUp" style="animation-delay:.2s">
+          <div class="stat-icon"><i class="fas fa-truck-loading"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Cần nhập hàng</div>
+            <div class="stat-value">{{ inventory.reorder|length }}</div>
+            <div class="stat-sub">sản phẩm có gợi ý nhập</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.3s">
+          <div class="stat-icon"><i class="fas fa-ruler"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Ngưỡng cảnh báo</div>
+            <div class="stat-value" style="font-size:1.3rem">{{ inventory.low_threshold }} sp</div>
+            <div class="stat-sub">hoặc &lt; 14 ngày bán hết</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-custom animate__animated animate__fadeInUp mb-4" style="animation-delay:.4s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-warehouse me-2 text-warning"></i>Cảnh báo tồn kho</h6>
+      </div>
+      {% if inventory.alerts and inventory.alerts|length > 0 %}
+      <div class="card-custom-body p-0">
+        <table class="table table-custom mb-0">
+          <thead>
+            <tr><th>Sản phẩm</th><th class="text-end">Tồn kho</th><th class="text-end">Bán 30 ngày</th><th class="text-end">Tốc độ bán/ngày</th><th class="text-end">Còn đủ bán (ngày)</th><th class="text-center">Trạng thái</th></tr>
+          </thead>
+          <tbody>
+            {% for a in inventory.alerts %}
+            <tr>
+              <td>{{ a.name }}</td>
+              <td class="text-end fw-bold">{{ a.stock }}</td>
+              <td class="text-end">{{ a.sold_30d }}</td>
+              <td class="text-end">{{ a.daily_rate }}</td>
+              <td class="text-end">{{ a.days_left }}</td>
+              <td class="text-center">
+                {% if a.status == 'out' %}
+                <span class="badge bg-danger">Hết hàng</span>
+                {% else %}
+                <span class="badge bg-warning text-dark">Sắp hết</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-custom-body text-center py-4">
+        <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+        <p class="text-muted mb-0">Tồn kho đang ổn — không có sản phẩm nào cần cảnh báo.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.5s">
+      <div class="card-custom-header">
+        <h6 class="mb-0"><i class="fas fa-lightbulb me-2 text-success"></i>Gợi ý nhập hàng theo dự báo AI</h6>
+      </div>
+      {% if inventory.reorder and inventory.reorder|length > 0 %}
+      <div class="card-custom-body p-0">
+        <table class="table table-custom mb-0">
+          <thead>
+            <tr><th>Sản phẩm</th><th class="text-end">Tồn kho hiện tại</th><th class="text-end">Số lượng nên nhập</th><th>Model dùng</th><th class="text-end">R²</th><th>Lý do</th></tr>
+          </thead>
+          <tbody>
+            {% for r in inventory.reorder %}
+            <tr>
+              <td>{{ r.name }}</td>
+              <td class="text-end">{{ r.stock }}</td>
+              <td class="text-end fw-bold text-primary">{{ r.suggest_qty }}</td>
+              <td><span class="badge bg-info text-dark">{{ r.model_used }}</span></td>
+              <td class="text-end">{{ "%.3f"|format(r.r2) if r.r2 is not none else "—" }}</td>
+              <td><small class="text-muted">{{ r.reason }}</small></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-custom-body text-center py-4">
+        <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+        <p class="text-muted mb-0">Chưa cần nhập thêm hàng — dự báo nhu cầu vẫn dưới mức tồn kho hiện tại.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TAB 5 — LỊCH SỬ ĐỘ CHÍNH XÁC MÔ HÌNH (walk-forward validation)
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane fade {% if active_tab == 'history' %}show active{% endif %}" id="tab-history" role="tabpanel">
+
+    {% if accuracy_history.has_data %}
+    <div class="row g-4 mb-4">
+      <div class="col-md-4">
+        <div class="stat-card stat-card-blue animate__animated animate__fadeInUp">
+          <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Sai số TB — Linear</div>
+            <div class="stat-value">{{ accuracy_history.avg_err_lin }}%</div>
+            <div class="stat-sub">trên dữ liệu mô hình chưa từng thấy</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-card stat-card-green animate__animated animate__fadeInUp" style="animation-delay:.1s">
+          <div class="stat-icon"><i class="fas fa-tree"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Sai số TB — Random Forest</div>
+            <div class="stat-value">{{ accuracy_history.avg_err_rf }}%</div>
+            <div class="stat-sub">trên dữ liệu mô hình chưa từng thấy</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-card stat-card-purple animate__animated animate__fadeInUp" style="animation-delay:.2s">
+          <div class="stat-icon"><i class="fas fa-trophy"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Mô hình ổn định hơn</div>
+            <div class="stat-value" style="font-size:1.2rem">{{ accuracy_history.better }}</div>
+            <div class="stat-sub">dựa trên {{ accuracy_history.n_points }} điểm kiểm tra</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.3s">
+      <div class="card-custom-header">
+        <div>
+          <h6 class="mb-0"><i class="fas fa-history me-2 text-info"></i>Chi tiết walk-forward validation — Tổng doanh thu</h6>
+          <small class="text-muted">Mỗi dòng: huấn luyện trên các tháng trước đó, dự đoán tháng kế tiếp, so với thực tế.</small>
+        </div>
       </div>
       <div class="card-custom-body p-0">
         <table class="table table-custom mb-0">
-          <thead><tr><th>Tháng</th><th class="text-end">Dự báo doanh thu</th></tr></thead>
-          <tbody>
-            {% for i in range(forecast.forecast_labels|length) %}
+          <thead>
             <tr>
-              <td><i class="fas fa-calendar me-2 text-primary"></i>Tháng {{ forecast.forecast_labels[i] }}</td>
-              <td class="text-end fw-bold text-success">{{ "{:,.0f}".format(forecast.forecast_values[i]) }} ₫</td>
+              <th>Tháng</th><th class="text-end">Thực tế</th>
+              <th class="text-end">Linear dự đoán</th><th class="text-end">Sai số Linear</th>
+              <th class="text-end">RF dự đoán</th><th class="text-end">Sai số RF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in accuracy_history.history %}
+            <tr>
+              <td>{{ h.label }}</td>
+              <td class="text-end">{{ "{:,.0f}".format(h.actual) }} ₫</td>
+              <td class="text-end">{{ "{:,.0f}".format(h.pred_lin) }} ₫</td>
+              <td class="text-end {% if h.pct_lin < 15 %}text-success{% elif h.pct_lin < 30 %}text-warning{% else %}text-danger{% endif %}">{{ h.pct_lin }}%</td>
+              <td class="text-end">{{ "{:,.0f}".format(h.pred_rf) }} ₫</td>
+              <td class="text-end {% if h.pct_rf < 15 %}text-success{% elif h.pct_rf < 30 %}text-warning{% else %}text-danger{% endif %}">{{ h.pct_rf }}%</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card-custom animate__animated animate__fadeInUp" style="animation-delay:.5s">
-      <div class="card-custom-header">
-        <h6 class="mb-0"><i class="fas fa-info-circle me-2 text-info"></i>Đánh giá độ chính xác mô hình</h6>
-      </div>
-      <div class="card-custom-body">
-        <p><strong><i class="fas fa-cogs me-1 text-muted"></i>Thuật toán:</strong> Linear Regression</p>
-        <p><strong><i class="fas fa-database me-1 text-muted"></i>Số tháng huấn luyện:</strong> {{ forecast.n_train }}</p>
-        <p>
-          <strong><i class="fas fa-ruler me-1 text-muted"></i>MAE:</strong> {{ "{:,.0f}".format(forecast.mae) }} ₫
-          <small class="text-muted d-block">Sai số tuyệt đối trung bình giữa giá trị thực và dự đoán.</small>
-        </p>
-        <p>
-          <strong><i class="fas fa-wave-square me-1 text-muted"></i>RMSE:</strong> {{ "{:,.0f}".format(forecast.rmse) }} ₫
-          <small class="text-muted d-block">Sai số bình phương trung bình — phạt nặng các sai lệch lớn.</small>
-        </p>
-        <p class="mb-0">
-          <strong><i class="fas fa-percentage me-1 text-muted"></i>R² Score:</strong> {{ "%.4f"|format(forecast.r2) }}
-          <small class="text-muted d-block">
-            Hệ số xác định — đo mức độ dữ liệu phù hợp với đường hồi quy. Giá trị thấp khi dữ liệu có nhiều biến động theo mùa; cần ít nhất 12+ tháng để đạt độ tin cậy cao.
-          </small>
-        </p>
-      </div>
+
+    <div class="alert alert-info mt-4 animate__animated animate__fadeIn" style="animation-delay:.4s">
+      <i class="fas fa-info-circle me-2"></i>
+      Để xem lịch sử độ chính xác của <strong>từng sản phẩm riêng</strong>, hãy mở tab "Theo sản phẩm" — kết quả walk-forward của sản phẩm đó hiển thị ngay bên dưới biểu đồ dự báo.
     </div>
+
+    {% else %}
+    <div class="card-custom text-center py-5 animate__animated animate__fadeIn">
+      <i class="fas fa-history fa-4x text-muted mb-3"></i>
+      <h5 class="text-muted">Chưa đủ dữ liệu để đánh giá walk-forward.</h5>
+      <p class="text-muted">Cần tối thiểu 4 tháng dữ liệu doanh thu tổng để bắt đầu kiểm tra độ chính xác theo thời gian.</p>
+    </div>
+    {% endif %}
   </div>
-</div>
 
-{% else %}
-<div class="card-custom text-center py-5 animate__animated animate__fadeIn">
-  <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
-  <h5 class="text-muted">{{ forecast.message }}</h5>
-  <p class="text-muted">Hãy tạo thêm đơn hàng để hệ thống có đủ dữ liệu dự báo.</p>
-  <a href="{{ url_for('orders.create') }}" class="btn btn-primary mt-2">
-    <i class="fas fa-plus me-2"></i>Tạo hóa đơn
-  </a>
 </div>
-{% endif %}
-
 {% endblock %}
 
 {% block extra_js %}
+<!-- ════════════ DỮ LIỆU & CSRF TOKEN DÙNG CHUNG CHO CÁC TAB AJAX ════════════ -->
+<script>
+  var CSRF_TOKEN = document.querySelector('input[name="csrf_token"]') ? document.querySelector('input[name="csrf_token"]').value : "";
+  var EXPORT_PDF_BASE   = "{{ url_for('forecast.export_pdf') }}";
+  var EXPORT_EXCEL_BASE = "{{ url_for('forecast.export_excel') }}";
+  var fmtMoney = new Intl.NumberFormat("vi-VN");
+  function moneyVND(v) { return fmtMoney.format(Math.round(v || 0)) + " ₫"; }
+</script>
+
 {% if forecast.has_data %}
+<!-- ════════════ TAB 1: CHART TỔNG DOANH THU ════════════ -->
 <script id="forecastData" type="application/json">
 {
   "actualLabels":   {{ forecast.actual_labels   | tojson }},
@@ -158,7 +727,6 @@
   "forecastValues": {{ forecast.forecast_values | tojson }}
 }
 </script>
-
 <script>
 (function () {
   var raw  = document.getElementById("forecastData").textContent;
@@ -243,4 +811,257 @@
 }());
 </script>
 {% endif %}
+
+<!-- ════════════ TAB 2: DỰ BÁO THEO SẢN PHẨM (AJAX) ════════════ -->
+<script>
+(function () {
+  var btn = document.getElementById("btnRunProductForecast");
+  if (!btn) return;
+
+  var productChartInstance = null;
+
+  btn.addEventListener("click", function () {
+    var productId   = document.getElementById("productSelect").value;
+    var monthsAhead = document.getElementById("productMonthsAhead").value;
+    var modelType   = document.getElementById("productModelType").value;
+
+    document.getElementById("productEmptyState").classList.add("d-none");
+    document.getElementById("productResultBody").classList.add("d-none");
+    document.getElementById("productLoading").classList.remove("d-none");
+
+    var body = new URLSearchParams({
+      product_id: productId,
+      months_ahead: monthsAhead,
+      model_type: modelType
+    });
+
+    fetch("{{ url_for('forecast.product_forecast') }}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRFToken": CSRF_TOKEN
+      },
+      body: body
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { renderProductResult(data); })
+      .catch(function (err) {
+        document.getElementById("productLoading").classList.add("d-none");
+        document.getElementById("productEmptyState").classList.remove("d-none");
+        document.getElementById("productEmptyState").innerHTML =
+          '<i class="fas fa-exclamation-triangle fa-3x mb-3 text-danger"></i><p class="mb-0">Có lỗi khi gọi API: ' + err + '</p>';
+      });
+  });
+
+  function renderProductResult(data) {
+    document.getElementById("productLoading").classList.add("d-none");
+
+    if (!data.has_data) {
+      document.getElementById("productEmptyState").classList.remove("d-none");
+      document.getElementById("productEmptyState").innerHTML =
+        '<i class="fas fa-info-circle fa-3x mb-3"></i><p class="mb-0">' + (data.message || "Sản phẩm chưa đủ dữ liệu.") + '</p>';
+      return;
+    }
+
+    document.getElementById("productResultBody").classList.remove("d-none");
+
+    var selectedOption = document.getElementById("productSelect").selectedOptions[0];
+    document.getElementById("pStatProductName").textContent = selectedOption ? selectedOption.text : "";
+
+    var modelLabel = data.model_chosen === "random_forest" ? "Random Forest" : "Linear Regression";
+    document.getElementById("pStatModel").textContent = modelLabel;
+    document.getElementById("pStatR2").textContent = data.r2.toFixed(4);
+    document.getElementById("pStatMae").textContent = moneyVND(data.mae);
+
+    var exportParams = new URLSearchParams({
+      scope: "product",
+      product_id: data.product_id,
+      months_ahead: document.getElementById("productMonthsAhead").value,
+      model_type: document.getElementById("productModelType").value
+    });
+    document.getElementById("btnExportProductPdf").href = EXPORT_PDF_BASE + "?" + exportParams.toString();
+    document.getElementById("btnExportProductExcel").href = EXPORT_EXCEL_BASE + "?" + exportParams.toString();
+
+    if (data.r2_rf !== null && data.r2_rf !== undefined) {
+      document.getElementById("pStatR2Compare").textContent =
+        "L:" + data.r2_linear.toFixed(3) + " · RF:" + data.r2_rf.toFixed(3);
+    } else {
+      document.getElementById("pStatR2Compare").textContent = "L:" + data.r2_linear.toFixed(3) + " (cần ≥4 tháng cho RF)";
+    }
+
+    // ── Bảng dự báo ──
+    var tbody = document.getElementById("productForecastTbody");
+    tbody.innerHTML = "";
+    for (var i = 0; i < data.forecast_labels.length; i++) {
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td><i class="fas fa-calendar me-2 text-primary"></i>' + data.forecast_labels[i] + '</td>' +
+        '<td class="text-end fw-bold text-success">' + moneyVND(data.forecast_values[i]) + '</td>' +
+        '<td class="text-end">' + Math.round(data.forecast_qty[i]) + ' sp</td>';
+      tbody.appendChild(tr);
+    }
+
+    // ── Walk-forward validation của riêng sản phẩm này ──
+    var wfBox = document.getElementById("productWalkForwardBody");
+    var wf = data.walk_forward;
+    if (wf && wf.has_data) {
+      var rows = "";
+      wf.history.forEach(function (h) {
+        rows += '<tr><td>' + h.label + '</td>' +
+          '<td class="text-end">' + moneyVND(h.actual) + '</td>' +
+          '<td class="text-end">' + h.pct_lin + '%</td>' +
+          '<td class="text-end">' + h.pct_rf + '%</td></tr>';
+      });
+      wfBox.innerHTML =
+        '<p class="mb-2"><strong>Sai số TB:</strong> Linear ' + wf.avg_err_lin + '% · RF ' + wf.avg_err_rf +
+        '% — <span class="badge bg-success">' + wf.better + ' ổn định hơn</span></p>' +
+        '<div class="table-responsive"><table class="table table-sm table-custom mb-0">' +
+        '<thead><tr><th>Tháng</th><th class="text-end">Thực tế</th><th class="text-end">%Sai Linear</th><th class="text-end">%Sai RF</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>';
+    } else {
+      wfBox.innerHTML = '<p class="text-muted mb-0">' + ((wf && wf.message) || "Sản phẩm cần thêm dữ liệu để đánh giá walk-forward.") + '</p>';
+    }
+
+    // ── Chart ──
+    var allLabels = data.actual_labels.concat(data.forecast_labels);
+    var actualPad = data.actual_values.concat(new Array(data.forecast_labels.length).fill(null));
+    var forecastPad = new Array(data.actual_labels.length - 1).fill(null)
+      .concat([data.actual_values[data.actual_values.length - 1]])
+      .concat(data.forecast_values);
+
+    if (productChartInstance) { productChartInstance.destroy(); }
+    var ctx = document.getElementById("productChart").getContext("2d");
+    productChartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: allLabels,
+        datasets: [
+          { label: "Thực tế", data: actualPad, borderColor: "#6366f1", backgroundColor: "rgba(99,102,241,0.1)", borderWidth: 3, pointRadius: 5, fill: true, tension: 0.4, spanGaps: false },
+          { label: "Dự báo", data: forecastPad, borderColor: "#f97316", backgroundColor: "rgba(249,115,22,0.1)", borderWidth: 3, borderDash: [8,4], pointRadius: 6, fill: true, tension: 0.4, spanGaps: false }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "top" }, tooltip: { callbacks: { label: function (item) { return item.dataset.label + ": " + moneyVND(item.parsed.y); } } } },
+        scales: { y: { ticks: { callback: function (v) { return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫"; } } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+}());
+</script>
+
+<!-- ════════════ TAB 3: SO SÁNH NHIỀU SẢN PHẨM (AJAX) ════════════ -->
+<script>
+(function () {
+  var compareBtn = document.getElementById("btnRunCompare");
+  if (!compareBtn) return;
+
+  var compareChartInstance = null;
+  var palette = ["#6366f1", "#22c55e", "#f97316", "#ec4899", "#14b8a6"];
+
+  function updateSelectedCount() {
+    var checked = document.querySelectorAll(".compare-checkbox:checked");
+    document.getElementById("compareSelectedCount").textContent = checked.length + "/5 sản phẩm đã chọn";
+    document.querySelectorAll(".compare-checkbox").forEach(function (cb) {
+      cb.closest(".product-check-item").classList.toggle("checked", cb.checked);
+      cb.disabled = (!cb.checked && checked.length >= 5);
+    });
+  }
+
+  document.querySelectorAll(".compare-checkbox").forEach(function (cb) {
+    cb.addEventListener("change", updateSelectedCount);
+  });
+
+  compareBtn.addEventListener("click", function () {
+    var checked = Array.prototype.slice.call(document.querySelectorAll(".compare-checkbox:checked"));
+    if (checked.length < 2) {
+      alert("Vui lòng chọn ít nhất 2 sản phẩm để so sánh.");
+      return;
+    }
+    var productIds = checked.map(function (cb) { return cb.value; });
+    var monthsAhead = parseInt(document.getElementById("compareMonthsAhead").value, 10);
+    var modelType = document.getElementById("compareModelType").value;
+
+    document.getElementById("compareEmptyState").classList.add("d-none");
+    document.getElementById("compareResultBody").classList.add("d-none");
+    document.getElementById("compareLoading").classList.remove("d-none");
+
+    fetch("{{ url_for('forecast.compare_products') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+      body: JSON.stringify({ product_ids: productIds, months_ahead: monthsAhead, model_type: modelType })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { renderCompareResult(data); })
+      .catch(function (err) {
+        document.getElementById("compareLoading").classList.add("d-none");
+        document.getElementById("compareEmptyState").classList.remove("d-none");
+        document.getElementById("compareEmptyState").innerHTML =
+          '<i class="fas fa-exclamation-triangle fa-3x mb-3 text-danger"></i><p class="mb-0">Có lỗi khi gọi API: ' + err + '</p>';
+      });
+  });
+
+  function renderCompareResult(results) {
+    document.getElementById("compareLoading").classList.add("d-none");
+
+    if (!results || results.length === 0) {
+      document.getElementById("compareEmptyState").classList.remove("d-none");
+      document.getElementById("compareEmptyState").innerHTML =
+        '<i class="fas fa-info-circle fa-3x mb-3"></i><p class="mb-0">Không có dữ liệu để so sánh — các sản phẩm này chưa đủ lịch sử bán hàng.</p>';
+      return;
+    }
+
+    document.getElementById("compareResultBody").classList.remove("d-none");
+
+    // ── Bảng ──
+    var tbody = document.getElementById("compareTableBody");
+    tbody.innerHTML = "";
+    results.forEach(function (r, idx) {
+      var monthsStr = r.forecast_labels.map(function (lbl, i) {
+        return lbl + ": " + moneyVND(r.forecast_values[i]);
+      }).join(" · ");
+      var modelLabel = r.model_chosen === "random_forest" ? "Random Forest" : "Linear";
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td><span class="status-dot" style="background:' + palette[idx % palette.length] + '"></span><strong>' + r.product_name + '</strong></td>' +
+        '<td><span class="badge bg-info text-dark">' + modelLabel + '</span></td>' +
+        '<td class="text-center">' + r.r2.toFixed(3) + '</td>' +
+        '<td><small>' + monthsStr + '</small></td>';
+      tbody.appendChild(tr);
+    });
+
+    // ── Chart: mỗi sản phẩm 1 đường, nối thực tế + dự báo ──
+    var baseLabels = results[0].actual_labels.concat(results[0].forecast_labels);
+    var datasets = results.map(function (r, idx) {
+      var actualPad = r.actual_values.concat(new Array(r.forecast_labels.length).fill(null));
+      var forecastPad = new Array(r.actual_labels.length - 1).fill(null)
+        .concat([r.actual_values[r.actual_values.length - 1]])
+        .concat(r.forecast_values);
+      var combined = actualPad.map(function (v, i) { return (v === null) ? forecastPad[i] : v; });
+      return {
+        label: r.product_name,
+        data: combined,
+        borderColor: palette[idx % palette.length],
+        backgroundColor: "transparent",
+        borderWidth: 3,
+        pointRadius: 3,
+        tension: 0.35,
+        spanGaps: true
+      };
+    });
+
+    if (compareChartInstance) { compareChartInstance.destroy(); }
+    var ctx = document.getElementById("compareChart").getContext("2d");
+    compareChartInstance = new Chart(ctx, {
+      type: "line",
+      data: { labels: baseLabels, datasets: datasets },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "top" }, tooltip: { callbacks: { label: function (item) { return item.dataset.label + ": " + moneyVND(item.parsed.y); } } } },
+        scales: { y: { ticks: { callback: function (v) { return new Intl.NumberFormat("vi-VN", { notation: "compact" }).format(v) + "₫"; } } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+}());
+</script>
 {% endblock %}
